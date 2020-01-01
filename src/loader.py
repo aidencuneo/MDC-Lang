@@ -7,7 +7,7 @@ symbols = string.punctuation
 whitespace = string.whitespace
 
 
-def get_code(fname, fromline=0, setcode=None):
+def get_code(fname, fromline=0, specificline=0, setcode=None):
     try:
         if not setcode:
             with open(fname) as f:
@@ -16,6 +16,8 @@ def get_code(fname, fromline=0, setcode=None):
             code = setcode
         for a in range(fromline - 1):
             code = code[code.index('\n') + 1:]
+        if specificline > 0:
+            code = code.split('\n')[specificline - 1]
         return code
     except Exception as e:
         return e

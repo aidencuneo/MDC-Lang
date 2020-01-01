@@ -11,13 +11,14 @@ DEFINE LINECOUNT CODE DIV "\n" ADD 1;
 'I am '   ; LEN CODE                ; " bytes in size.\n";
 
 (0000)  : READ "\n-- Press enter to continue --\n";
-(A000)  : READ 'Type a regex string without quotes: ';
+(A000)  : REGEX [ READ 'Type a regex string without quotes: ' ]; GOTO 0 < BOOLEAN (A000) > 17;
 (0000)  : READ 'Is this correct?[y/n] ';
-GOTO -2 : NOT [ (0000) EQ 'y' ];
+GOTO -2 < NOT [ (0000) EQ 'y' ] > 19;
+EXIT;
 
 'Thanks. Now have fun typing your own strings ';
-'and testing them with your regex string!';
+"and testing them with your regex string!\n";
 
-(0000) : READ '> ';
+(A000) EQ [ READ '> ' ]; "\n";
 
-GOTO -2 : TRUE:
+GOTO -2;

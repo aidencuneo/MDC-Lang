@@ -30,6 +30,6 @@ if isinstance(code, Exception):
 try:
     var.run(code, fname, raw=True)
 except (KeyboardInterrupt, EOFError):
-    var.call_error('KeyboardInterrupt called (most likely due to Ctrl+C or Ctrl+Z).', error_type='ioerr')
+    var.call_error('KeyboardInterrupt called.', error_type='ioerr')
 except Exception as e:
     var.call_error('', error_type='fatal')

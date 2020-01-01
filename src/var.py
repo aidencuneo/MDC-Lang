@@ -232,7 +232,11 @@ class String(Datatype):
 class RegexString(Datatype):
 
     def __init__(self, value):
-        self.value = re.compile(value)
+        mdc_assert(self, value, (str, re.Pattern, String), 'REGEX')
+        if isinstance(value, (str, re.Pattern)):
+            self.value = re.compile(value)
+        elif isinstance(value, String):
+            self.value = re.compile(value.value)
 
     def __repr__(self):
         return pformat(self.value)
@@ -242,7 +246,8 @@ class RegexString(Datatype):
 
     def EQ(self, other):
         mdc_assert(self, other, String, 'EQ')
-        return bool(self.value.match(other.value)), Boolean
+        a = self.value.match(other.value)
+        return int(a) if a else 0, Integer
 
 
 class Boolean(Datatype):
@@ -293,24 +298,23 @@ def call_error(text, line=None, error_type=None, showfile=True):
     if isinstance(line, (list, tuple)):
         line = ' '.join([str(a) for a in line])
     print(end='\n')
-    if showfile:
-        print('During parsing of file: ' + os.path.abspath(current_file) + ';')
+    e = 'ERROR'
     if error_type == 'eval':
-        print('ERROR attempting to run an eval statement:')
+        e = 'ERROR attempting to run an eval statement'
     elif error_type == 'exp':
-        print('ERROR attempting to evaluate expression:')
+        e = 'ERROR attempting to evaluate expression'
     elif error_type == 'ioerr':
-        print('IOERROR:')
+        e = 'IOERROR'
     elif error_type == 'argerr':
-        print('ARGUMENT ERROR:')
+        e = 'ARGUMENT ERROR'
     elif error_type == 'assert':
-        print('ASSERTION ERROR:')
+        e = 'ASSERTION ERROR'
     elif error_type == 'var':
-        print('VAR ERROR:')
+        e = 'VAR ERROR'
     elif error_type == 'syntax':
-        print('SYNTAX ERROR:')
+        e = 'SYNTAX ERROR'
     elif error_type == 'attr':
-        print('ATTRIBUTE ERROR:')
+        e = 'ATTRIBUTE ERROR'
     elif error_type == 'fatal':
         print('A fatal error has occurred which has terminated the runtime environment.')
         print('PYTHON TRACEBACK:')
@@ -318,10 +322,12 @@ def call_error(text, line=None, error_type=None, showfile=True):
         print('Please consider posting this traceback as an issue on the GitHub Repository page at: '
             'https://github.com/aidencuneo/MDC-Lang')
         sys.exit()
-    else:
-        print('ERROR:')
+    print('> ' + e + (
+        ' at file "' + os.path.abspath(current_file) + '", line ' + str(current_line)
+        if showfile else ''))
+    print('  -> ' + loader.get_code('', specificline=current_line, setcode=current_code).strip())
     if line:
-        print('  -> ' + line)
+        print('  ~~ ' + line)
     print('  :: ' + text)
     sys.exit()
 
@@ -364,6 +370,7 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
     o = ''
     i = 0
     while i < len(code):
+        current_line += loader.tokenise_file(rawcode, dofilter=False)[i].count('\n')
         if not code[i]:
             i += 1
             continue
@@ -378,7 +385,7 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                 try:
                     arg_count = int(a[2])
                 except ValueError:
-                    call_error('Invalid argument count "' + a[2] + '" for function declaration, should be an integer.', code[i])
+                    call_error('Invalid argument count "' + a[2] + '" for function declaration, should be an integer.', error_type='argerr')
                 ret = a[a.index(':') + 1:]
                 create_function(name, arg_count, ret)
             elif a[0] == 'PROC' and len(a) > 3:
@@ -393,58 +400,63 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                         o += str(a)
                         if echo:
                             print(a, end='')
-            elif a[0] == 'GOTO':
-                if current_file == '<EVAL>':
-                    call_error('GOTO statement does not work on evaluated expressions.', code[i])
-                if not a[1:]:
-                    call_error('GOTO statement requires at least one argument.', code[i], 'argerr')
-                line = evaluate(a[1:a.index(':')])
-                condition = evaluate(a[a.index(':') + 1:])
-                try:
-                    line = int(line.value)
-                    if line < 0:
-                        line = current_line + 1 + line
-                    if not line <= current_code.count('\n') + 1:
-                        call_error('GOTO statement argument must be lower than the line count of the current file.', code[i])
-                except ValueError:
-                    call_error('GOTO statement argument must be a valid line number.', code[i])
-                if condition:
-                    code = loader.process(loader.get_code('', line, current_code))
-                    filename = 'keep'
-                    tokenised = False
-                    oneline = False
-                    i = 0
-                    continue
             else:
                 key = ''.join(a[:a.index(':')])
                 if key.startswith('array[(') and key.endswith(')]'):
                     key = ast.literal_eval(key[6:-1])
                 else:
                     call_error('Invalid variable key. Variable keys must be surrounded by parentheses.',
-                        code[i], 'var')
+                        error_type='var')
                 value = evaluate(a[a.index(':') + 1:], code[i])
                 array[key] = value
         elif a[0] == 'IMPORT':
             if len(a) < 2:
-                call_error('IMPORT statement requires at least one argument.', code[i], 'argerr')
+                call_error('IMPORT statement requires at least one argument.', error_type='argerr')
             fname = str(evaluate([a[1]]))
             oldfile = current_file
             oldcode = current_code
             oldline = current_line
-            run(loader.get_code(fname), fname, raw=True)
+            newcode = loader.get_code(fname)
+            if isinstance(newcode, Exception):
+                call_error('There was an error attempting to read from ' + fname + '.', error_type='ioerr')
+            run(newcode, fname, raw=True)
             current_file = oldfile
             current_code = oldcode
             current_line = oldline
         elif a[0] == 'DEFINE':
             if len(a) < 3:
-                call_error('DEFINE statement requires two arguments, KEY and VALUE.', code[i], 'argerr')
+                call_error('DEFINE statement requires two arguments, KEY and VALUE.', error_type='argerr')
             key = a[1].strip()
             if not key:
-                call_error('DEFINE statement key must not be empty.', code[i], 'argerr')
+                call_error('DEFINE statement key must not be empty.', error_type='argerr')
             if key in global_vars:
-                call_error('Constant with key ' + pformat(key) + ' already exists. Constants can not be redefined.', code[i], 'syntax')
+                call_error('Constant with key ' + pformat(key) + ' already exists. Constants can not be redefined.', error_type='syntax')
             value = evaluate(a[2:])
             global_vars[key] = value
+        elif a[0] == 'GOTO':
+            if current_file == '<EVAL>':
+                call_error('GOTO statement does not work on evaluated expressions.')
+            if not a[1:]:
+                call_error('GOTO statement requires at least one argument.', error_type='argerr')
+            line = evaluate(a[1:])
+            try:
+                line = int(line.value)
+                if line < 1:
+                    line = current_line + 1 + line
+                    current_line = line
+                if not line <= current_code.count('\n') + 1:
+                    call_error('GOTO statement argument must be lower than the line count of the current file.')
+            except ValueError:
+                call_error('GOTO statement argument must be a valid line number.')
+            newcode = loader.get_code('', fromline=line, setcode=current_code)
+            if isinstance(newcode, Exception):
+                call_error('There was an error attempting to read from ' + current_file + '.', error_type='ioerr')
+            code = loader.process(newcode)
+            filename = 'keep'
+            tokenised = False
+            oneline = False
+            i = 0
+            continue
         elif a[0] in procedures:
             procedures[a[0]].call()
         else:
@@ -455,7 +467,6 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                     sys.stdout.write(str(a))
                     if '\n' in str(a):
                         sys.stdout.flush()
-        current_line += loader.tokenise_file(rawcode, dofilter=False)[i].count('\n')
         i += 1
     return o
 
@@ -604,7 +615,7 @@ def evaluate(exp, error=None, args=None):
             token = new[a]
             if len(token) > 100:
                 token = token[:97] + '...'
-            call_error('Invalid or Undefined Token: ' + token, revertkeys(exp), 'syntax')
+            call_error('Invalid or Undefined Token: ' + pformat(token), revertkeys(exp), 'syntax')
         a += 1
     code = ','.join([(type(a).__name__ + '(' + pformat(a) + ')') if isinstance(a, builtin_types) else a for a in new])
     out = code
