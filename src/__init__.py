@@ -1,6 +1,5 @@
 import os
 import sys
-import timeit
 
 import loader
 import var
