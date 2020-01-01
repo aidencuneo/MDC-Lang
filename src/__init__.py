@@ -27,4 +27,9 @@ if isinstance(code, Exception):
     var.call_error("The path: '" + str(fname) + "' could not be accessed, "
         'perhaps caused by a permission error or something similar.', error_type='ioerr')
 
-var.run(code, fname, raw=True)
+try:
+    var.run(code, fname, raw=True)
+except (KeyboardInterrupt, EOFError):
+    var.call_error('KeyboardInterrupt called (most likely due to Ctrl+C or Ctrl+Z).', error_type='ioerr')
+except Exception as e:
+    var.call_error('', error_type='fatal')

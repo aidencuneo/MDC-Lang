@@ -3,17 +3,13 @@ import os
 import re
 import sys
 import string
+import traceback as tb
 
 from functools import partial
 from pprint import pformat
 
 import compact
 import loader
-
-alphabet = string.letters if sys.version_info[0] < 3 else string.ascii_letters
-digits = string.digits
-symbols = string.punctuation
-whitespace = string.whitespace
 
 input_func = 'raw_input' if sys.version_info[0] < 3 else 'input'
 get_input = raw_input if sys.version_info[0] < 3 else input
@@ -115,13 +111,64 @@ class Integer(Datatype):
         if isinstance(other, Boolean):
             return self.value * other.value.value, Integer
 
+    def DIV(self, other):
+        mdc_assert(self, other, (Integer, Float, Boolean), 'DIV')
+        if isinstance(other, (Integer, Float)):
+            return self.value / other.value, type(other)
+        if isinstance(other, Boolean):
+            return self.value * int(not other.value.value), Integer
+
+    def PWR(self, other):
+        mdc_assert(self, other, (Integer, Float, Boolean), 'PWR')
+        if isinstance(other, (Integer, Float)):
+            return self.value ** other.value, type(other)
+        if isinstance(other, Boolean):
+            return self.value ** other.value.value, Integer
+
+    def EQ(self, other):
+        mdc_assert(self, other, (Integer, Float, String, Boolean), 'EQ')
+        if isinstance(other, (Integer, Float)):
+            return self.value == other.value, Boolean
+        if isinstance(other, String):
+            return self.value == len(other.value), Boolean
+        if isinstance(other, Boolean):
+            return self.value == other.value.value, Boolean
+
     def LT(self, other):
-        mdc_assert(self, other, (Integer, Float), 'LT')
-        return self.value < other.value, Boolean
+        mdc_assert(self, other, (Integer, Float, String, Boolean), 'LT')
+        if isinstance(other, (Integer, Float)):
+            return self.value < other.value, Boolean
+        if isinstance(other, String):
+            return self.value < len(other.value), Boolean
+        if isinstance(other, Boolean):
+            return self.value < other.value.value, Boolean
+
+    def GT(self, other):
+        mdc_assert(self, other, (Integer, Float, String, Boolean), 'GT')
+        if isinstance(other, (Integer, Float)):
+            return self.value > other.value, Boolean
+        if isinstance(other, String):
+            return self.value > len(other.value), Boolean
+        if isinstance(other, Boolean):
+            return self.value > other.value.value, Boolean
 
     def LE(self, other):
-        mdc_assert(self, other, (Integer, Float), 'LE')
-        return self.value <= other.value, Boolean
+        mdc_assert(self, other, (Integer, Float, String, Boolean), 'LE')
+        if isinstance(other, (Integer, Float)):
+            return self.value <= other.value, Boolean
+        if isinstance(other, String):
+            return self.value <= len(other.value), Boolean
+        if isinstance(other, Boolean):
+            return self.value <= other.value.value, Boolean
+
+    def GE(self, other):
+        mdc_assert(self, other, (Integer, Float, String, Boolean), 'GE')
+        if isinstance(other, (Integer, Float)):
+            return self.value >= other.value, Boolean
+        if isinstance(other, String):
+            return self.value >= len(other.value), Boolean
+        if isinstance(other, Boolean):
+            return self.value >= other.value.value, Boolean
 
 
 class Float(Datatype):
@@ -238,10 +285,16 @@ def initialise_path(path):
     os.chdir(path)
 
 
-def call_error(text, line=None, error_type=None):
+def initialise_global_vars(file=None):
+    global_vars['FILE'] = String(current_file if file is None else file)
+
+
+def call_error(text, line=None, error_type=None, showfile=True):
     if isinstance(line, (list, tuple)):
         line = ' '.join([str(a) for a in line])
     print(end='\n')
+    if showfile:
+        print('During parsing of file: ' + os.path.abspath(current_file) + ';')
     if error_type == 'eval':
         print('ERROR attempting to run an eval statement:')
     elif error_type == 'exp':
@@ -258,6 +311,13 @@ def call_error(text, line=None, error_type=None):
         print('SYNTAX ERROR:')
     elif error_type == 'attr':
         print('ATTRIBUTE ERROR:')
+    elif error_type == 'fatal':
+        print('A fatal error has occurred which has terminated the runtime environment.')
+        print('PYTHON TRACEBACK:')
+        tb.print_exc()
+        print('Please consider posting this traceback as an issue on the GitHub Repository page at: '
+            'https://github.com/aidencuneo/MDC-Lang')
+        sys.exit()
     else:
         print('ERROR:')
     if line:
@@ -286,12 +346,17 @@ def eval_statement(code, args, error):
         call_error(str(e), error, 'eval')
 
 
-def run(code, filename=None, tokenised=False, oneline=False, echo=True, raw=False):
+def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=False):
     global current_file
     global current_code
+    global current_line
+    code = rawcode
+    if not current_file:
+        initialise_global_vars(file=filename)
     if filename != 'keep':
         current_file = '<EVAL>' if filename is None else filename
         current_code = current_code if filename is None else code
+        current_line = 1
     if raw:
         code = loader.process(code)
     if oneline:
@@ -305,7 +370,7 @@ def run(code, filename=None, tokenised=False, oneline=False, echo=True, raw=Fals
         if tokenised:
             a = replacekeys(code[i])
         else:
-            a = replacekeys(tokenise(code[i]))
+            a = replacekeys(loader.tokenise(code[i]))
         #print(a)
         if ':' in a:
             if a[0] == 'NEW' and len(a) > 4:
@@ -337,11 +402,12 @@ def run(code, filename=None, tokenised=False, oneline=False, echo=True, raw=Fals
                 condition = evaluate(a[a.index(':') + 1:])
                 try:
                     line = int(line.value)
-                    assert line <= current_code.count('\n')
+                    if line < 0:
+                        line = current_line + 1 + line
+                    if not line <= current_code.count('\n') + 1:
+                        call_error('GOTO statement argument must be lower than the line count of the current file.', code[i])
                 except ValueError:
                     call_error('GOTO statement argument must be a valid line number.', code[i])
-                except AssertionError:
-                    call_error('GOTO statement argument must be lower than the line count of the current file.', code[i])
                 if condition:
                     code = loader.process(loader.get_code('', line, current_code))
                     filename = 'keep'
@@ -362,9 +428,13 @@ def run(code, filename=None, tokenised=False, oneline=False, echo=True, raw=Fals
             if len(a) < 2:
                 call_error('IMPORT statement requires at least one argument.', code[i], 'argerr')
             fname = str(evaluate([a[1]]))
-            old = current_file
-            run(loader.get_code(fname), fname)
-            current_file = old
+            oldfile = current_file
+            oldcode = current_code
+            oldline = current_line
+            run(loader.get_code(fname), fname, raw=True)
+            current_file = oldfile
+            current_code = oldcode
+            current_line = oldline
         elif a[0] == 'DEFINE':
             if len(a) < 3:
                 call_error('DEFINE statement requires two arguments, KEY and VALUE.', code[i], 'argerr')
@@ -385,6 +455,7 @@ def run(code, filename=None, tokenised=False, oneline=False, echo=True, raw=Fals
                     sys.stdout.write(str(a))
                     if '\n' in str(a):
                         sys.stdout.flush()
+        current_line += loader.tokenise_file(rawcode, dofilter=False)[i].count('\n')
         i += 1
     return o
 
@@ -496,7 +567,7 @@ def evaluate(exp, error=None, args=None):
                 call_error('Right square braces without left square braces.', revertkeys(exp), 'syntax')
             if not new[a].endswith(']'):
                 call_error('Left square braces without right square braces.', revertkeys(exp), 'syntax')
-            new[a] = evaluate(replacekeys(tokenise(new[a][1:-1].strip())))
+            new[a] = evaluate(replacekeys(loader.tokenise(new[a][1:-1].strip())))
         elif new[a].startswith('<') or new[a].endswith('>'):
             if not new[a].startswith('<'):
                 call_error('Right angle bracket without left angle bracket.', revertkeys(exp), 'syntax')
@@ -506,7 +577,7 @@ def evaluate(exp, error=None, args=None):
                 call_error('Shorthand condition requires a left hand argument.', revertkeys(exp), 'argerr')
             if not a <= len(new):
                 call_error('Shorthand condition requires a right hand argument.', revertkeys(exp), 'argerr')
-            condition = evaluate(replacekeys(tokenise(new[a][1:-1].strip())))
+            condition = evaluate(replacekeys(loader.tokenise(new[a][1:-1].strip())))
             left = new[a - 1]
             right = new[a + 1]
             del new[a + 1]
@@ -533,7 +604,6 @@ def evaluate(exp, error=None, args=None):
             token = new[a]
             if len(token) > 100:
                 token = token[:97] + '...'
-            raise Exception
             call_error('Invalid or Undefined Token: ' + token, revertkeys(exp), 'syntax')
         a += 1
     code = ','.join([(type(a).__name__ + '(' + pformat(a) + ')') if isinstance(a, builtin_types) else a for a in new])
@@ -543,9 +613,6 @@ def evaluate(exp, error=None, args=None):
             out = eval(code)
             return out
         except Exception as e:
-            print(exp)
-            print(new)
-            print(out)
             call_error(str(e), revertkeys(exp), 'exp')
     return out
 
@@ -556,7 +623,7 @@ def replacekeys(line):
             values = []
             for b in line[a][1:-1].split(','):
                 hx = b.strip().upper()
-                if not all([c in digits + 'ABCDEF' for c in hx]):
+                if not all([c in loader.digits + 'ABCDEF' for c in hx]):
                     call_error('Invalid variable key. Variable keys must be in Hexadecimal form, including commas and: "0123456789ABCDEF".',
                         line, 'var')
                 values += ['0x' + hx]
@@ -566,7 +633,7 @@ def replacekeys(line):
             c = ''
             line[a] = line[a][2:]
             for z in range(len(line[a])):
-                if line[a][z] in digits:
+                if line[a][z] in loader.digits:
                     b += line[a][z]
                 else:
                     c += line[a][z]
@@ -604,7 +671,7 @@ def replaceargs(code):
             index = i
         elif arg == 1 and code[i] == '{':
             arg = 2
-        elif arg == 2 and code[i] in digits:
+        elif arg == 2 and code[i] in loader.digits:
             current += code[i]
         elif arg == 2 and code[i] == '}':
             code[index:i + 1] = 'args[' + current + ']'
@@ -618,90 +685,6 @@ def replaceargs(code):
             current = ''
         i += 1
     return ''.join(code)
-
-
-def tokenise(line):
-    sq = False
-    dq = False
-    bt = False
-    rb = False
-    sb = False
-    cb = False
-    lg = False
-    l = []
-    o = ''
-    p = ''
-    t = ''
-    for a in line.strip():
-        q = p
-        if a in alphabet:
-            p = 'A'
-        elif a in digits:
-            p = 'D'
-        elif a in symbols:
-            p = 'S'
-        elif a in whitespace:
-            p = 'W'
-        if (q != p and p != 'W' or p == 'S') and not (
-        sq or dq or bt or rb or sb or cb or lg):
-            l.append(o.strip())
-            o = ''
-        if a == "'" and not dq:
-            sq = not sq
-        elif a == '"' and not sq:
-            dq = not dq
-        elif a == '`' and not (
-        sq or dq or rb or sb or cb or lg):
-            bt = not bt
-        elif a == '(' and not (
-        sq or dq or bt or sb or cb or lg):
-            rb = True
-        elif a == ')' and not (
-        sq or dq or bt or sb or cb or lg):
-            rb = False
-        elif a == '[' and not (
-        sq or dq or bt or rb or cb or lg):
-            sb = True
-        elif a == ']' and not (
-        sq or dq or bt or rb or cb or lg):
-            sb = False
-        elif a == '{' and not (
-        sq or dq or bt or rb or sb or lg):
-            cb = True
-        elif a == '}' and not (
-        sq or dq or bt or rb or sb or lg):
-            cb = False
-        elif a == '<' and not (
-        sq or dq or bt or rb or sb or cb):
-            lg = True
-        elif a == '>' and not (
-        sq or dq or bt or rb or sb or cb):
-            lg = False
-        o += a
-        t = a
-    k = []
-    pair = []
-    for a in list(filter(None, l + [o])):
-        pair.append(a)
-        if pair[1:]:
-            if pair[0] == '$' and pair[1] in digits:
-                del k[-1]
-                k.append('$' + pair[1])
-            elif pair[0] == '-' and pair[1] in digits:
-                del k[-1]
-                k.append('-' + pair[1])
-            elif pair[0] == '+' and pair[1] in digits:
-                del k[-1]
-                k.append('+' + pair[1])
-            elif pair[0] == 'RE' and (pair[1].startswith('"') or pair[1].startswith("'")):
-                del k[-1]
-                k.append('RE' + pair[1])
-            else:
-                k.append(a)
-            del pair[0]
-        else:
-            k.append(a)
-    return k
 
 
 def split_list(s, split_at):
@@ -723,11 +706,13 @@ def split_list(s, split_at):
 
 class BFList:
 
+    @staticmethod
     def read(*args):
         return String(get_input(*args)
             if [a for a in args if type(a) is not Null]
             else get_input())
 
+    @staticmethod
     def get_length(*args):
         if not args:
             call_error('LEN must have at least one argument', error_type='argerr')
@@ -735,6 +720,7 @@ class BFList:
             return Integer(len(args[0].value))
         return Integer(len(args[0]))
 
+    @staticmethod
     def readfile(*args):
         if not args:
             call_error('READFILE must have at least one argument.', error_type='argerr')
@@ -757,6 +743,7 @@ class BFList:
 
 current_file = ''
 current_code = ''
+current_line = 1
 global_args = [String(a) for a in sys.argv[1:]]
 
 datatypes_switch = {
@@ -770,9 +757,7 @@ builtin_types = tuple(datatypes_switch.values()) + (
     RegexString,
 )
 
-global_vars = compact.CompactDict({
-    'FILE': global_args[0] if global_args else '<EVAL>',
-})
+global_vars = compact.CompactDict()
 array = compact.CompactDict()
 functions = {
     'INTEGER': BuiltinFunction(1, Integer),

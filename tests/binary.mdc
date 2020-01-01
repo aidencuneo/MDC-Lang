@@ -1,12 +1,23 @@
-DEFINE ZERO  0;
-DEFINE ONE   1;
-DEFINE TWO   2;
-DEFINE THREE 3;
-DEFINE FOUR  4;
-DEFINE FIVE  5;
-DEFINE SIX   6;
-DEFINE SEVEN 7;
-DEFINE EIGHT 8;
-DEFINE NINE  9;
+IMPORT 'functions.mdc';
 
-FIVE ADD FOUR SUB TWO;
+DEFINE CODE READFILE FILE;
+DEFINE LINECOUNT CODE DIV "\n" ADD 1;
+
+'I have ' ; LINECOUNT               ; " lines.\n";
+'I have ' ; CODE DIV ';' SUB 1      ; " semicolons.\n";
+'I have ' ; CODE DIV 'GOTO' SUB 2   ; " GOTO statements.\n";
+'I have ' ; CODE DIV 'DEFINE' SUB 2 ; " DEFINE statements.\n";
+'I have ' ; CODE DIV ' '            ; " spaces.\n";
+'I am '   ; LEN CODE                ; " bytes in size.\n";
+
+(0000)  : READ "\n-- Press enter to continue --\n";
+(A000)  : READ 'Type a regex string without quotes: ';
+(0000)  : READ 'Is this correct?[y/n] ';
+GOTO -2 : NOT [ (0000) EQ 'y' ];
+
+'Thanks. Now have fun typing your own strings ';
+'and testing them with your regex string!';
+
+(0000) : READ '> ';
+
+GOTO -2 : TRUE:
