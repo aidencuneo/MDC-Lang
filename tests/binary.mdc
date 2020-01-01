@@ -1,4 +1,12 @@
-'You typed'
-< RE'^-*[0-9]+' EQ [ READ '> ' ] >
-"You didn't type";
-" an integer.\n";
+DEFINE ZERO  0;
+DEFINE ONE   1;
+DEFINE TWO   2;
+DEFINE THREE 3;
+DEFINE FOUR  4;
+DEFINE FIVE  5;
+DEFINE SIX   6;
+DEFINE SEVEN 7;
+DEFINE EIGHT 8;
+DEFINE NINE  9;
+
+FIVE ADD FOUR SUB TWO;

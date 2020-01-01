@@ -7,6 +7,7 @@ import string
 from functools import partial
 from pprint import pformat
 
+import compact
 import loader
 
 alphabet = string.letters if sys.version_info[0] < 3 else string.ascii_letters
@@ -101,6 +102,19 @@ class Integer(Datatype):
         mdc_assert(self, other, (Integer, Float), 'ADD')
         return self.value + other.value, type(other)
 
+    def SUB(self, other):
+        mdc_assert(self, other, (Integer, Float), 'SUB')
+        return self.value - other.value, type(other)
+
+    def MULT(self, other):
+        mdc_assert(self, other, (Integer, Float, String, Boolean), 'SUB')
+        if isinstance(other, (Integer, Float)):
+            return self.value * other.value, type(other)
+        if isinstance(other, String):
+            return self.value * other.value, String
+        if isinstance(other, Boolean):
+            return self.value * other.value.value, Integer
+
     def LT(self, other):
         mdc_assert(self, other, (Integer, Float), 'LT')
         return self.value < other.value, Boolean
@@ -134,6 +148,27 @@ class String(Datatype):
     def ADD(self, other):
         mdc_assert(self, other, String, 'ADD')
         return self.value + other.value, String
+
+    def SUB(self, other):
+        mdc_assert(self, other, (Integer, String), 'SUB')
+        if isinstance(other, Integer):
+            return self.value[:-Integer.value()], String
+        if isinstance(other, String):
+            return self.value.replace(other.value, '', 1), String
+
+    def MULT(self, other):
+        mdc_assert(self, other, (Integer, Boolean), 'MULT')
+        if isinstance(other, Integer):
+            return self.value * other.value, String
+        if isinstance(other, Boolean):
+            return self.value * other.value.value, String
+
+    def DIV(self, other):
+        mdc_assert(self, other, (String, Boolean), 'DIV')
+        if isinstance(other, String):
+            return self.value.count(other.value), Integer
+        if isinstance(other, Boolean):
+            return self.value if other.value.value else '', String
 
     def EQ(self, other):
         mdc_assert(self, other, String, 'EQ')
@@ -251,10 +286,14 @@ def eval_statement(code, args, error):
         call_error(str(e), error, 'eval')
 
 
-def run(code, filename=None, tokenised=False, oneline=False, echo=True):
+def run(code, filename=None, tokenised=False, oneline=False, echo=True, raw=False):
     global current_file
+    global current_code
     if filename != 'keep':
         current_file = '<EVAL>' if filename is None else filename
+        current_code = current_code if filename is None else code
+    if raw:
+        code = loader.process(code)
     if oneline:
         code = [code]
     o = ''
@@ -267,6 +306,7 @@ def run(code, filename=None, tokenised=False, oneline=False, echo=True):
             a = replacekeys(code[i])
         else:
             a = replacekeys(tokenise(code[i]))
+        #print(a)
         if ':' in a:
             if a[0] == 'NEW' and len(a) > 4:
                 name = a[1]
@@ -297,13 +337,13 @@ def run(code, filename=None, tokenised=False, oneline=False, echo=True):
                 condition = evaluate(a[a.index(':') + 1:])
                 try:
                     line = int(line.value)
-                    assert line <= loader.count_lines(current_file)
+                    assert line <= current_code.count('\n')
                 except ValueError:
                     call_error('GOTO statement argument must be a valid line number.', code[i])
                 except AssertionError:
                     call_error('GOTO statement argument must be lower than the line count of the current file.', code[i])
                 if condition:
-                    code = loader.get_code(current_file, line)
+                    code = loader.process(loader.get_code('', line, current_code))
                     filename = 'keep'
                     tokenised = False
                     oneline = False
@@ -331,16 +371,20 @@ def run(code, filename=None, tokenised=False, oneline=False, echo=True):
             key = a[1].strip()
             if not key:
                 call_error('DEFINE statement key must not be empty.', code[i], 'argerr')
+            if key in global_vars:
+                call_error('Constant with key ' + pformat(key) + ' already exists. Constants can not be redefined.', code[i], 'syntax')
             value = evaluate(a[2:])
             global_vars[key] = value
         elif a[0] in procedures:
             procedures[a[0]].call()
         else:
             a = evaluate(a)
-            if a:
+            if type(a) in builtin_types:
                 o += str(a)
                 if echo:
-                    print(a, end='')
+                    sys.stdout.write(str(a))
+                    if '\n' in str(a):
+                        sys.stdout.flush()
         i += 1
     return o
 
@@ -489,6 +533,7 @@ def evaluate(exp, error=None, args=None):
             token = new[a]
             if len(token) > 100:
                 token = token[:97] + '...'
+            raise Exception
             call_error('Invalid or Undefined Token: ' + token, revertkeys(exp), 'syntax')
         a += 1
     code = ','.join([(type(a).__name__ + '(' + pformat(a) + ')') if isinstance(a, builtin_types) else a for a in new])
@@ -711,6 +756,7 @@ class BFList:
 #
 
 current_file = ''
+current_code = ''
 global_args = [String(a) for a in sys.argv[1:]]
 
 datatypes_switch = {
@@ -724,10 +770,10 @@ builtin_types = tuple(datatypes_switch.values()) + (
     RegexString,
 )
 
-global_vars = {
+global_vars = compact.CompactDict({
     'FILE': global_args[0] if global_args else '<EVAL>',
-}
-array = {}
+})
+array = compact.CompactDict()
 functions = {
     'INTEGER': BuiltinFunction(1, Integer),
     'FLOAT': BuiltinFunction(1, Float),

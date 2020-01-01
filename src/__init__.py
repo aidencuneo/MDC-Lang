@@ -15,7 +15,7 @@ if not sys.argv[1:]:
     print(end='\n')
     code = loader.get_code(prompt)
 
-fname = sys.argv[1]
+fname = ' '.join(sys.argv[1:])
 if not os.path.isfile(fname):
     var.call_error("The path: '" + str(fname) + "' could not be found.", error_type='ioerr')
 
@@ -27,4 +27,4 @@ if isinstance(code, Exception):
     var.call_error("The path: '" + str(fname) + "' could not be accessed, "
         'perhaps caused by a permission error or something similar.', error_type='ioerr')
 
-var.run(code, fname)
+var.run(code, fname, raw=True)

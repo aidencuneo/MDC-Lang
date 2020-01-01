@@ -1,16 +1,19 @@
-def get_code(fname, fromline=0):
+def get_code(fname, fromline=0, setcode=None):
     try:
-        with open(fname) as f:
-            code = f.read()
+        if not setcode:
+            with open(fname) as f:
+                code = f.read()
+        else:
+            code = setcode
         for a in range(fromline - 1):
             code = code[code.index('\n') + 1:]
-        return process(code)
+        return code
     except Exception as e:
         return e
 
 
 def process(code):
-    return code.replace('\n', '').split(';')
+    return list(filter(None, code.replace('\n', '').split(';')))
 
 
 def count_lines(fname):
