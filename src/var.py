@@ -410,7 +410,7 @@ def eval_functions(exp, args=None):
 
 def evaluate(exp, error=None, args=None):
     if not exp:
-        return exp
+        return Null()
     reps = (
         'ADD',
         'SUB',
@@ -446,8 +446,9 @@ def evaluate(exp, error=None, args=None):
                 a -= 1
             except AttributeError:
                 call_error('Type ' + type(new[a - 1]).__name__ + ' does not have a method for handling ' + new[a], revertkeys(exp), 'attr')
-        elif new[a].startswith('[') or new[a].endswith(']') and not new[a].startswith('args['):
+        elif (new[a].startswith('[') or new[a].endswith(']')) and not new[a].startswith('args['):
             if not new[a].startswith('['):
+                print(new, new[a])
                 call_error('Right square braces without left square braces.', revertkeys(exp), 'syntax')
             if not new[a].endswith(']'):
                 call_error('Left square braces without right square braces.', revertkeys(exp), 'syntax')
@@ -596,32 +597,40 @@ def tokenise(line):
             p = 'S'
         elif a in whitespace:
             p = 'W'
-        con = (q != p and p != 'W' or p == 'S') and not (
-            sq or dq or bt or rb or sb or cb or lg)
-        if con:
+        if (q != p and p != 'W' or p == 'S') and not (
+        sq or dq or bt or rb or sb or cb or lg):
             l.append(o.strip())
             o = ''
-        if a == "'":
+        if a == "'" and not dq:
             sq = not sq
-        elif a == '"':
+        elif a == '"' and not sq:
             dq = not dq
-        elif a == '`':
+        elif a == '`' and not (
+        sq or dq or rb or sb or cb or lg):
             bt = not bt
-        elif a == '(':
+        elif a == '(' and not (
+        sq or dq or bt or sb or cb or lg):
             rb = True
-        elif a == ')':
+        elif a == ')' and not (
+        sq or dq or bt or sb or cb or lg):
             rb = False
-        elif a == '[':
+        elif a == '[' and not (
+        sq or dq or bt or rb or cb or lg):
             sb = True
-        elif a == ']':
+        elif a == ']' and not (
+        sq or dq or bt or rb or cb or lg):
             sb = False
-        elif a == '{':
+        elif a == '{' and not (
+        sq or dq or bt or rb or sb or lg):
             cb = True
-        elif a == '}':
+        elif a == '}' and not (
+        sq or dq or bt or rb or sb or lg):
             cb = False
-        elif a == '<':
+        elif a == '<' and not (
+        sq or dq or bt or rb or sb or cb):
             lg = True
-        elif a == '>':
+        elif a == '>' and not (
+        sq or dq or bt or rb or sb or cb):
             lg = False
         o += a
         t = a
@@ -670,7 +679,9 @@ def split_list(s, split_at):
 class BFList:
 
     def read(*args):
-        return String(get_input(*args))
+        return String(get_input(*args)
+            if [a for a in args if type(a) is not Null]
+            else get_input())
 
     def get_length(*args):
         if not args:
@@ -725,8 +736,7 @@ functions = {
     'BOOLEAN': BuiltinFunction(1, Boolean),
     'NULL': BuiltinFunction(0, Null),
 
-    'READ': BuiltinFunction(0, BFList.read),
-    'PROMPT': BuiltinFunction(1, BFList.read),
+    'READ': BuiltinFunction(1, BFList.read),
     'LEN': BuiltinFunction(1, BFList.get_length),
     'READFILE': BuiltinFunction(1, BFList.readfile),
 

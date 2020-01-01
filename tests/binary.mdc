@@ -1,17 +1,4 @@
-IMPORT 'functions.mdc';
-
-DEFINE REGEXNUM RE'^-*[0-9]+';
-
-(A) : '-10';
-(B) : '100';
-(C) : 'p0tato';
-(D) : '\n\n\n';
-
-"0xA is a number.\n" <
-    REGEXNUM EQ (A)  > "0xA is not a number.\n";
-"0xB is a number.\n" <
-    REGEXNUM EQ (B)  > "0xB is not a number.\n";
-"0xC is a number.\n" <
-    REGEXNUM EQ (C)  > "0xC is not a number.\n";
-"0xD is a number.\n" <
-    REGEXNUM EQ (D)  > "0xD is not a number.\n";
+'You typed'
+< RE'^-*[0-9]+' EQ [ READ '> ' ] >
+"You didn't type";
+" an integer.\n";

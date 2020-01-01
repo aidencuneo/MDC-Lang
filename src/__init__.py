@@ -6,7 +6,10 @@ import var
 
 if not sys.argv[1:]:
     print('No input file given.')
-    prompt = var.get_input('Type a file path to run a file, or press enter to quit: ')
+    try:
+        prompt = var.get_input('Type a file path to run a file, or press enter to quit: ')
+    except (KeyboardInterrupt, EOFError):
+        prompt = False
     if not prompt:
         sys.exit()
     print(end='\n')
