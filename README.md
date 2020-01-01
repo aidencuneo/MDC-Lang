@@ -18,7 +18,7 @@ A more complex example would be using two String surrounding the DIV keyword to 
 
     'foo foo bar bar' DIV 'foo';
 
-Returns: `2`;
+Returns: `2`
 
 List of current keywords:
 
