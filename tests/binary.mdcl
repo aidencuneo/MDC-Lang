@@ -1,4 +1,14 @@
-IMPORT 'functions.mdc';
+IMPORT 'functions.mdcl';
+
+NEW STARTT :
+{
+    "Welcome.\n";
+    YIELD 0;
+};
+
+(0) : STARTT;
+'PROGRAM FAILED' < (0) EQ 0 > 'PROGRAM SUCCEEDED';
+".\n";
 
 (A000) : 'string';
 (A001) : FIRST (A000);
