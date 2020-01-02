@@ -420,7 +420,7 @@ class RegexString(Datatype):
 class Boolean(Datatype):
 
     def __init__(self, value):
-        mdc_assert(self, value, (str,) + builtin_types, 'BOOLEAN', showname=False)
+        mdc_assert(self, value, (str, bool) + builtin_types, 'BOOLEAN', showname=False)
         if isinstance(value, str):
             value = value.lower()
             if value == 'true':
@@ -429,6 +429,8 @@ class Boolean(Datatype):
                 self.value = Integer(0)
             else:
                 self.value = Integer(bool(value))
+        elif isinstance(value, bool):
+            self.value = Integer(value)
         elif isinstance(value, builtin_types):
             self.value = Integer(bool(value.value))
         else:
