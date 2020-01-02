@@ -1,24 +1,10 @@
 IMPORT 'functions.mdc';
 
-DEFINE CODE READFILE FILE;
-DEFINE LINECOUNT CODE DIV "\n" ADD 1;
+(A000) : 'string';
+(A001) : FIRST (A000);
 
-'I have ' ; LINECOUNT               ; " lines.\n";
-'I have ' ; CODE DIV ';' SUB 1      ; " semicolons.\n";
-'I have ' ; CODE DIV 'GOTO' SUB 2   ; " GOTO statements.\n";
-'I have ' ; CODE DIV 'DEFINE' SUB 2 ; " DEFINE statements.\n";
-'I have ' ; CODE DIV ' '            ; " spaces.\n";
-'I am '   ; LEN CODE                ; " bytes in size.\n";
+(0) : START;
+(1) : EMPTY;
+(2) : SHORT;
 
-(0000)  : READ "\n-- Press enter to continue --\n";
-(A000)  : REGEX [ READ 'Type a regex string without quotes: ' ]; GOTO 0 < BOOLEAN (A000) > 17;
-(0000)  : READ 'Is this correct?[y/n] ';
-GOTO -2 < NOT [ (0000) EQ 'y' ] > 19;
-EXIT;
-
-'Thanks. Now have fun typing your own strings ';
-"and testing them with your regex string!\n";
-
-(A000) EQ [ READ '> ' ]; "\n";
-
-GOTO -2;
+(A001) MULT [ LEN (A000) ];

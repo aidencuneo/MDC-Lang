@@ -1,35 +1,28 @@
-import os
+import os.path
 import sys
-
-import loader
-import var
 
 if not sys.argv[1:]:
     print('No input file given.')
-    try:
-        prompt = var.get_input('Type a file path to run a file, or press enter to quit: ')
-    except (KeyboardInterrupt, EOFError):
-        prompt = False
-    if not prompt:
-        sys.exit()
-    print(end='\n')
-    code = loader.get_code(prompt)
+    sys.exit()
+
+from loader import get_code
+from var import get_input, call_error, initialise_path, run
 
 fname = ' '.join(sys.argv[1:])
 if not os.path.isfile(fname):
-    var.call_error("The path: '" + str(fname) + "' could not be found.", error_type='ioerr')
+    call_error("The path: '" + str(fname) + "' could not be found.", error_type='ioerr')
 
 fname = os.path.abspath(fname)
 dirname = os.path.dirname(fname)
-var.initialise_path(dirname)
-code = loader.get_code(fname)
+initialise_path(dirname)
+code = get_code(fname)
 if isinstance(code, Exception):
-    var.call_error("The path: '" + str(fname) + "' could not be accessed, "
+    call_error("The path: '" + str(fname) + "' could not be accessed, "
         'perhaps caused by a permission error or something similar.', error_type='ioerr')
 
 try:
-    var.run(code, fname, raw=True)
+    run(code, fname, raw=True)
 except (KeyboardInterrupt, EOFError):
-    var.call_error('KeyboardInterrupt called.', error_type='ioerr')
+    call_error('KeyboardInterrupt called.', error_type='ioerr')
 except Exception as e:
-    var.call_error('', error_type='fatal')
+    call_error('', error_type='fatal')

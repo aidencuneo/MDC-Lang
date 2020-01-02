@@ -42,7 +42,7 @@ def tokenise(line):
     bt = False
     rb = False
     sb = 0
-    cb = False
+    cb = 0
     lg = 0
     l = []
     o = ''
@@ -59,7 +59,7 @@ def tokenise(line):
         elif a in whitespace:
             p = 'W'
         if (q != p and p != 'W' or p == 'S') and not (
-        sq or dq or bt or rb or (sb > 0) or cb or (lg > 0)):
+        sq or dq or bt or rb or sb > 0 or cb > 0 or lg > 0):
             l.append(o.strip())
             o = ''
         if a == "'" and not dq:
@@ -67,31 +67,31 @@ def tokenise(line):
         elif a == '"' and not sq:
             dq = not dq
         elif a == '`' and not (
-        sq or dq or rb or sb or cb or lg):
+        sq or dq or rb or sb > 0 or cb > 0 or lg > 0):
             bt = not bt
         elif a == '(' and not (
-        sq or dq or bt or sb or cb or lg):
+        sq or dq or bt or sb > 0 or cb > 0 or lg > 0):
             rb = True
         elif a == ')' and not (
-        sq or dq or bt or sb or cb or lg):
+        sq or dq or bt or sb > 0 or cb > 0 or lg > 0):
             rb = False
         elif a == '[' and not (
-        sq or dq or bt or rb or cb or lg):
+        sq or dq or bt or rb or cb > 0 or lg > 0):
             sb += 1
         elif a == ']' and not (
-        sq or dq or bt or rb or cb or lg):
+        sq or dq or bt or rb or cb > 0 or lg > 0):
             sb -= 1
         elif a == '{' and not (
-        sq or dq or bt or rb or sb or lg):
-            cb = True
+        sq or dq or bt or rb or sb > 0 or lg > 0):
+            cb += 1
         elif a == '}' and not (
-        sq or dq or bt or rb or sb or lg):
-            cb = False
+        sq or dq or bt or rb or sb > 0 or lg > 0):
+            cb -= 1
         elif a == '<' and not (
-        sq or dq or bt or rb or sb or cb):
+        sq or dq or bt or rb or sb > 0 or cb > 0):
             lg += 1
         elif a == '>' and not (
-        sq or dq or bt or rb or sb or cb):
+        sq or dq or bt or rb or sb > 0 or cb > 0):
             lg -= 1
         o += a
         t = a
@@ -126,7 +126,7 @@ def tokenise_file(code, split_at=';', dofilter=True):
     bt = False
     rb = False
     sb = 0
-    cb = False
+    cb = 0
     lg = 0
     l = []
     o = ''
@@ -138,34 +138,34 @@ def tokenise_file(code, split_at=';', dofilter=True):
         elif a == '"' and not sq:
             dq = not dq
         elif a == '`' and not (
-        sq or dq or rb or sb or cb or lg):
+        sq or dq or rb or sb > 0 or cb > 0 or lg > 0):
             bt = not bt
         elif a == '(' and not (
-        sq or dq or bt or sb or cb or lg):
+        sq or dq or bt or sb > 0 or cb > 0 or lg > 0):
             rb = True
         elif a == ')' and not (
-        sq or dq or bt or sb or cb or lg):
+        sq or dq or bt or sb > 0 or cb > 0 or lg > 0):
             rb = False
         elif a == '[' and not (
-        sq or dq or bt or rb or cb or lg):
+        sq or dq or bt or rb or cb > 0 or lg > 0):
             sb += 1
         elif a == ']' and not (
-        sq or dq or bt or rb or cb or lg):
+        sq or dq or bt or rb or cb > 0 or lg > 0):
             sb -= 1
         elif a == '{' and not (
-        sq or dq or bt or rb or sb or lg):
-            cb = True
+        sq or dq or bt or rb or sb > 0 or lg > 0):
+            cb += 1
         elif a == '}' and not (
-        sq or dq or bt or rb or sb or lg):
-            cb = False
+        sq or dq or bt or rb or sb > 0 or lg > 0):
+            cb -= 1
         elif a == '<' and not (
-        sq or dq or bt or rb or sb or cb):
+        sq or dq or bt or rb or sb > 0 or cb > 0):
             lg += 1
         elif a == '>' and not (
-        sq or dq or bt or rb or sb or cb):
+        sq or dq or bt or rb or sb > 0 or cb > 0):
             lg -= 1
         if a == split_at and not (
-        sq or dq or bt or rb or (sb > 0) or cb or (lg > 0)):
+        sq or dq or bt or rb or sb > 0 or cb > 0 or lg > 0):
             l.append(o.strip(' \t\v\f\r'))
             o = ''
         else:
