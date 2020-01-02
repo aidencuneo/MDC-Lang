@@ -2,16 +2,16 @@
 
 2. Use `pyinstaller src/__init__.py` on Windows.
 
-3. Delete /build.
+3. Delete /build folder,
+   delete /dist/__init__.exe.manifest file,
+   delete /__init__.spec file.
 
 4. Copy /src/__pycache__/* files into the newly created /dist/__init__.
 
-5. Rename /dist/__init__ to /dist/mdcl-v1.0.0 (replace 1.0.0 with version number).
+5. Rename files from /src/__pycache__ and take out the `.cpython-*` parts, which leaves them as filename.pyc.
 
-6. Rename files from the /src/__pycache__ and take out the `.cpython-38` parts, which leaves them as filename.pyc.
+6. Rename /dist/__init__ to /dist/mdcl-v1.0.0 (replace 1.0.0 with version number).
 
 7. Rename the executable file (__init__.exe) to mdcl.exe.
-
-8. OPTIONAL: Delete the __init__.exe.manifest file, or just continue as normal because it won't commit to GitHub.
 
 Done.
