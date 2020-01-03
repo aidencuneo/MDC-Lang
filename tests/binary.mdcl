@@ -1,20 +1,5 @@
-IMPORT 'functions.mdcl';
+_ READ '> ';
 
-NEW STARTT :
-{
-    "Welcome.\n";
-    YIELD 0;
-};
-
-(0) : STARTT;
-'PROGRAM FAILED' < (0) EQ 0 > 'PROGRAM SUCCEEDED';
-".\n";
-
-(A000) : 'string';
-(A001) : FIRST (A000);
-
-(0) : START;
-(1) : EMPTY;
-(2) : SHORT;
-
-(A001) MULT [ LEN (A000) ];
+IF _ EQ 'aiden' : 'String is AIDEN.' :
+ELIF _ : 'String is something else, but TRUE.' :
+ELSE   : 'String is FALSE.';

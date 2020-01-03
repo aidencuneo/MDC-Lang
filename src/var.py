@@ -35,7 +35,7 @@ class Function:
         for a in range(len(self.args)):
             if a >= len(args):
                 args += [Null()]
-            elif type(args[a]).__name__ not in self.args[a] and '@' not in self.args:
+            elif type(args[a]).__name__ not in self.args[a] and '@' not in self.args[a]:
                 types = '(' + ', '.join([b for b in self.args[a] if b != '*']) + ')'
                 call_error('Argument ' + str(a + 1) + ' of function ' + self.name + ' must fit into: '
                     + types + '. "' + type(args[a]).__name__ + '" is invalid.', 'assert')
@@ -45,31 +45,18 @@ class Function:
         if ex_args:
             args += ex_args
         args = self.check_args(args)
-        return evaluate([self.code], args=args[:len(self.args)])
+        r = evaluate([self.code], args=args[:len(self.args)])
+        global_vars['_'] = r
+        return r
 
 
 class BuiltinFunction(Function):
 
     def call(self, args, ex_args=None):
-        if ex_args:
-            ex_args = replacekeys(ex_args)
         args = self.check_args(args)
-        return self.code([evaluate(args[:len(self.args)], args=ex_args)][0])
-
-
-class Procedure:
-
-    def __init__(self, action):
-        self.action = action
-
-    def call(self):
-        evaluate(self.action)
-
-
-class BuiltinProcedure(Procedure):
-
-    def call(self):
-        self.action()
+        r = self.code([evaluate(args[:len(self.args)], args=ex_args)][0])
+        global_vars['_'] = r
+        return r
 
 
 class Datatype:
@@ -440,7 +427,7 @@ class Boolean(Datatype):
         return self.value.__repr__()
 
     def __str__(self):
-        return self.value.__repr__()
+        return self.__repr__().upper()
 
     def __bool__(self):
         return bool(self.value)
@@ -466,6 +453,7 @@ def initialise_path(path):
 
 def initialise_global_vars(file=None):
     global_vars['FILE'] = String(current_file if file is None else file)
+    global_vars['_'] = Null()
 
 
 def call_error(text, error_type=None, line=None, showfile=True):
@@ -554,14 +542,13 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
             i += 1
             continue
         if tokenised:
-            a = replacekeys(code[i], localargs)
+            a = replacekeys(code[i], args=localargs)
         else:
-            a = replacekeys(loader.tokenise(code[i]), localargs)
+            a = replacekeys(loader.tokenise(code[i]), args=localargs)
         if ':' in a:
             if a[0] == 'NEW':
                 if len(a) < 4:
-                    call_error('Function declaration requires a function name, function code, and the ";" separator.',
-                        'argerr')
+                    call_error('Function declaration requires at least a function name, function code, and the ":" separator.', 'argerr')
                 name = a[1]
                 func = a[-1]
                 arguments = tuple(filter(None, split_list(a[2:-1], ':')))
@@ -569,36 +556,72 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                 optionals = False
                 for b in arguments:
                     for c in b:
-                        if c not in types and not c == '*':
+                        if c not in types and not c == '*' and not c == '@':
                             call_error(pformat(c) + ' is not defined as a type.', 'attr')
                     if '*' in b:
                         optionals = True
                     elif optionals and not '*' in b:
                         call_error('Optional function arguments must be after all positional arguments.', 'syntax')
                 functions[name] = Function(name, arguments, func)
-            elif a[0] == 'PROC' and len(a) > 3:
-                name = a[1]
-                action = a[a.index(':') + 1:]
-                create_procedure(name, action)
-            elif a[0] == 'IF' and len(a) > 3:
-                condition = a[1:a.index(':')]
-                if evaluate(condition):
-                    a = run(a[a.index(':') + 1:], 'keep', True, True, False)
-                    if a:
-                        o += str(a)
-                        if echo:
-                            print(a, end='')
+            elif a[0] == 'IF':
+                if len(a) < 3:
+                    call_error('IF statement requires at least a condition, the ":" separator, and code to run.', 'syntax')
+                contents = tuple(filter(None, split_list(a[1:], ':')))
+                conditions = [contents[0]]
+                runcodes = [contents[1]]
+                haselse = False
+                con = contents[2:]
+                b = 0
+                while b < len(con):
+                    if con[b][0] == 'IF':
+                        call_error('IF can not be placed after ELIF or ELSE in the same chain.', 'syntax')
+                    elif con[b][0] == 'ELIF':
+                        if len(con[b]) < 2 or b + 2 >= len(con):
+                            call_error('ELIF statement requires at least a condition, the ":" separator, and code to run.', 'syntax')
+                        if haselse:
+                            call_error('ELIF can not be placed after ELSE in the same chain.', 'syntax')
+                        conditions += [con[b][1:]]
+                        runcodes += [con[b + 1]]
+                        b += 1
+                    elif con[b][0] == 'ELSE':
+                        haselse = True
+                        if b + 1 >= len(con):
+                            call_error('ELSE statement requires at least the ":" separator and code to run.', 'syntax')
+                        if len(con[b]) > 1:
+                            call_error('ELSE statement can not have any conditions, use the ELIF statement to evaluate conditions.', 'syntax')
+                        conditions += ['ELSE']
+                        runcodes += [con[b + 1]]
+                        b += 1
+                    elif haselse:
+                        call_error('ELSE statement ends an IF-ELIF-ELSE chain. Tokens can not be evaluated after one.', 'syntax')
+                    b += 1
+                if len(conditions) != len(runcodes):
+                    call_error('Number of conditions must be equal to number of code sets to run in an IF-ELIF-ELSE chain.', 'syntax')
+                for b in range(len(conditions)):
+                    e = False
+                    if conditions[b] == 'ELSE':
+                        e = True
+                    elif Boolean(evaluate(conditions[b], args=localargs)):
+                        e = True
+                    if e:
+                        ev = evaluate(runcodes[b], args=localargs)
+                        if not isinstance(ev, Null):
+                            sys.stdout.write(str(ev))
+                            if '\n' in str(ev):
+                                sys.stdout.flush()
+                        break
             else:
                 key = ''.join(a[:a.index(':')])
                 if key.startswith('array[(') and key.endswith(')]'):
                     key = ast.literal_eval(key[6:-1])
                 else:
-                    call_error('Invalid variable key. Variable keys must be surrounded by parentheses.',
-                        'var')
+                    call_error('Invalid variable key. Variable keys must be surrounded by parentheses.', 'var')
                 value = evaluate(a[a.index(':') + 1:], code[i])
                 array[key] = value
         elif a[0] == 'NEW':
             call_error('Function declaration is missing the ":" separator.', 'syntax')
+        elif a[0] == 'IF':
+            call_error('IF statement is missing the ":" separator.', 'syntax')
         elif a[0] == 'IMPORT':
             if len(a) < 2:
                 call_error('IMPORT statement requires at least one argument.', 'argerr')
@@ -624,16 +647,21 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
             value = evaluate(a[2:])
             global_vars[key] = value
         elif a[0] == 'GOTO':
-            if current_file == '<EVAL>':
-                call_error('GOTO statement does not work on evaluated expressions.')
+            if current_file == '<METHOD>':
+                call_error('GOTO statement does not work in any areas protected by scope definers (between \'{\' and \'}\').')
             if not a[1:]:
                 call_error('GOTO statement requires at least one argument.', 'argerr')
-            line = evaluate(a[1:])
+            line = evaluate(a[1:], args=localargs)
             try:
                 line = int(line.value)
-                if line < 1:
-                    line = current_line + 1 + line
+                print(current_code, current_line)
+                exit()
+                if line < 0:
+                    line = current_line + line
                     current_line = line
+                elif not line:
+                    line = current_line
+                print(line, current_code.count('\n') + 1)
                 if not line <= current_code.count('\n') + 1:
                     call_error('GOTO statement argument must be lower than the line count of the current file.')
             except ValueError:
@@ -650,11 +678,9 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
         elif a[0] == 'YIELD':
             if not yielding:
                 call_error('Yielding is not possible from the current scope.', 'syntax')
-            yielded += [evaluate(a[1:])]
-        elif a[0] in procedures:
-            procedures[a[0]].call()
+            yielded += [evaluate(a[1:], args=localargs)]
         else:
-            a = evaluate(a)
+            a = evaluate(a, args=localargs)
             if type(a) in builtin_types:
                 o += str(a)
                 if echo:
@@ -665,10 +691,6 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
     if yielding:
         return yielded
     return o
-
-
-def create_procedure(name, action):
-    procedures[name] = Procedure(action)
 
 
 def eval_datatypes(exp):
@@ -711,6 +733,9 @@ def eval_datatypes(exp):
 
 
 def eval_functions(exp, args=None):
+    global current_file
+    global current_code
+    global current_line
     if not exp:
         return exp
     new = [a for a in exp]
@@ -733,8 +758,16 @@ def eval_functions(exp, args=None):
             f = evaluate(new[a + 1:a + 1 + limit], args)
             if not isinstance(f, (tuple, list)):
                 f = f,
+            oldfile = current_file
+            oldcode = current_code
+            oldline = current_line
+            current_file = '<METHOD>'
+            current_code = functions[new[a]].code
+            current_line = 1
             new[a] = functions[new[a]].call(f, ex_args=args)
-            #new[a] = eval_datatypes([pformat(new[a])])[0]
+            current_file = oldfile
+            current_code = oldcode
+            current_line = oldline
             del new[a + 1:a + 1 + limit]
         a += 1
     return new
@@ -764,47 +797,47 @@ def evaluate(exp, error=None, args=None):
             pass
         elif new[a] in reps:
             if a - 1 < 0:
-                call_error('Missing first argument for ' + new[a] + ' method.', revertkeys(exp), 'syntax')
+                call_error('Missing first argument for ' + new[a] + ' method.', 'syntax', revertkeys(exp))
             if a + 1 >= len(new):
-                call_error('Missing second argument for ' + new[a] + ' method.', revertkeys(exp), 'syntax')
+                call_error('Missing second argument for ' + new[a] + ' method.', 'syntax', revertkeys(exp))
             try:
-                vals = new[a - 1].do_action(new[a], (evaluate([new[a + 1]]),))
+                vals = new[a - 1].do_action(new[a], (evaluate([new[a + 1]], args=args),))
                 settype = vals[1] if isinstance(vals, tuple) else type(new[a - 1])
                 new[a] = settype(vals[0])
                 del new[a + 1]
                 del new[a - 1]
-                a -= 1
+                a -= 2
             except AttributeError:
-                print(new)
-                call_error('Type ' + type(new[a - 1]).__name__ + ' does not have a method for handling ' + new[a], revertkeys(exp), 'attr')
+                call_error('Type ' + type(new[a - 1]).__name__ + ' does not have a method for handling ' + new[a], 'attr', revertkeys(exp))
         elif (new[a].startswith('[') or new[a].endswith(']')) and not new[a].startswith('args['):
             if not new[a].startswith('['):
-                call_error('Unmatched ' + pformat(']') + '.', revertkeys(exp), 'syntax')
+                call_error('Unmatched ' + pformat(']') + '.', 'syntax', revertkeys(exp))
             if not new[a].endswith(']'):
-                call_error('Unmatched ' + pformat('[') + '.', revertkeys(exp), 'syntax')
-            new[a] = evaluate(replacekeys(loader.tokenise(new[a][1:-1].strip())))
+                call_error('Unmatched ' + pformat('[') + '.', 'syntax', revertkeys(exp))
+            new[a] = evaluate(replacekeys(loader.tokenise(new[a][1:-1].strip())), args=args)
         elif new[a].startswith('<') or new[a].endswith('>'):
             if not new[a].startswith('<'):
-                call_error('Unmatched ' + pformat('>') + '.', revertkeys(exp), 'syntax')
+                call_error('Unmatched ' + pformat('>') + '.', 'syntax', revertkeys(exp))
             if not new[a].endswith('>'):
-                call_error('Unmatched ' + pformat('<') + '.', revertkeys(exp), 'syntax')
+                call_error('Unmatched ' + pformat('<') + '.', 'syntax', revertkeys(exp))
             if not a > 0:
-                call_error('Shorthand condition requires a left hand argument.', revertkeys(exp), 'argerr')
+                call_error('Shorthand condition requires a left hand argument.', 'argerr', revertkeys(exp))
             if not a <= len(new):
-                call_error('Shorthand condition requires a right hand argument.', revertkeys(exp), 'argerr')
-            condition = evaluate(replacekeys(loader.tokenise(new[a][1:-1].strip())))
-            left = new[a - 1]
-            right = new[a + 1]
+                call_error('Shorthand condition requires a right hand argument.', 'argerr', revertkeys(exp))
+            condition = evaluate(replacekeys(loader.tokenise(new[a][1:-1].strip()), args=args), args=args)
+            r = replacekeys(loader.tokenise(new[a][1:-1].strip()), args)
+            left = evaluate(replacekeys([new[a - 1]], args=args), args=args)
+            right = evaluate(replacekeys([new[a + 1]], args=args), args=args)
             del new[a + 1]
             del new[a - 1]
             a -= 1
-            new[a] = left if condition else right
+            new[a] = left if bool(Boolean(condition)) else right
         elif new[a].startswith('{') or new[a].endswith('}'):
             if not new[a].startswith('{'):
                 call_error('Unmatched ' + pformat('}') + '.', 'syntax')
             if not new[a].endswith('}'):
                 call_error('Unmatched ' + pformat('{') + '.', 'syntax')
-            value = run(new[a][1:-1].strip(), filename='keep', echo=True, raw=True, yielding=True, localargs=args)
+            value = run(new[a].strip()[1:-1].strip(), filename='keep', echo=True, raw=True, yielding=True, localargs=args)
             new[a] = value[-1] if value else Null()
         elif new[a].startswith('<EVAL>') and new[a].endswith('</EVAL>'):
             new[a] = new[a][6:-7]
@@ -812,11 +845,11 @@ def evaluate(exp, error=None, args=None):
             new[a] = eval_statement(b[0], args, b[1])
         elif new[a] in global_vars:            
             new[a] = global_vars[new[a]]
-        elif new[a] not in functions and new[a] not in procedures:
+        elif new[a] not in functions:
             token = new[a]
             if len(token) > 100:
                 token = token[:97] + '...'
-            call_error('Invalid or Undefined Token: ' + pformat(token), revertkeys(exp), 'syntax')
+            call_error('Invalid or Undefined Token: ' + pformat(token), 'syntax', error)
         a += 1
     code = ','.join([(type(a).__name__ + '(' + pformat(a) + ')') if isinstance(a, builtin_types) else a for a in new])
     out = code
@@ -825,19 +858,24 @@ def evaluate(exp, error=None, args=None):
             out = eval(code)
             return out
         except Exception as e:
-            call_error(str(e), revertkeys(exp), 'exp')
+            print(exp)
+            print(new)
+            print(code)
+            call_error(str(e), 'exp', error)
     return out
 
 
 def replacekeys(line, args=None):
     for a in range(len(line)):
-        if line[a].startswith('(') and line[a].endswith(')'):
+        if isinstance(line[a], builtin_types):
+            pass
+        elif line[a].startswith('(') and line[a].endswith(')'):
             values = []
             for b in line[a][1:-1].split(','):
                 hx = b.strip().upper()
                 if not all([c in loader.digits + 'ABCDEF' for c in hx]):
                     call_error('Invalid variable key. Variable keys must be in Hexadecimal form, including commas and: "0123456789ABCDEF".',
-                        line, 'var')
+                        'var', line)
                 values += ['0x' + hx]
             line[a] = 'array[(' + ','.join(values) + ',)]'
         elif line[a].startswith('$'):
@@ -855,7 +893,7 @@ def replacekeys(line, args=None):
             if args is not None:
                 key = int(line[a][5:-1])
                 if key >= len(args):
-                    call_error('Local argument list index out of range, ' + str(key) + ' > ' + str(len(args) - 1) + '.', 'argerr', revertkeys(exp))
+                    call_error('Local argument list index out of range, ' + str(key) + ' > ' + str(len(args) - 1) + '.', 'argerr', line)
                 line[a] = args[key]
         elif line[a].startswith('`') and line[a].endswith('`'):
             line[a] = '<EVAL>' + replaceargs(line[a][1:-1]) + '\n\\' + pformat(line[a]) + '</EVAL>'
@@ -1020,7 +1058,6 @@ functions = {
         lambda x: Boolean(not x.value)),
 
     'EXIT': BuiltinFunction('EXIT',
-        [['@', '*']],
-        sys.exit),
+        [],
+        lambda x: (String(''), sys.exit())[0]),
 }
-procedures = {}

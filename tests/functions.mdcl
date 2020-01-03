@@ -1,17 +1,6 @@
-NEW FIRST :
-String : {
-    YIELD $0 INDEX 0;
+NEW ISTYPE
+: String
+: @
+: {
+    YIELD TYPE $1 EQ $0;
 };
-
-NEW START : {
-    'Welcome!'; "\n";
-    (0) : 0;
-    (0) ; "\n";
-};
-
-NEW EMPTY : {
-
-};
-
-NEW SHORT :
-    "You called the SHORT function.";
