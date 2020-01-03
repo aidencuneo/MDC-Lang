@@ -1,5 +1,11 @@
 '''
 
+MDCL created by Aiden Blishen Cuneo.
+First Commit was at: 1/1/2020.
+
+
+PATTERN:
+
 definition,
 
     __init__,
@@ -87,7 +93,12 @@ class CompactDict:
 
     def __str__(self):
         return str(self.as_dict())
-    
+
+    def __add__(self, other):
+        for a in other:
+            self[a] = other[a]
+        return self
+
     def __delattr__(self, key):
         self.delete_key(key)
 

@@ -1,3 +1,10 @@
+'''
+
+MDCL created by Aiden Blishen Cuneo.
+First Commit was at: 1/1/2020.
+
+'''
+
 import sys
 import string
 
@@ -100,13 +107,13 @@ def tokenise(line):
     for a in list(filter(None, l + [o])):
         pair.append(a)
         if pair[1:]:
-            if pair[0] == '$' and pair[1] in digits:
+            if pair[0] == '$' and all([b in digits for b in pair[1]]):
                 del k[-1]
                 k.append('$' + pair[1])
-            elif pair[0] == '-' and pair[1] in digits:
+            elif pair[0] == '-' and all([b in digits for b in pair[1]]):
                 del k[-1]
                 k.append('-' + pair[1])
-            elif pair[0] == '+' and pair[1] in digits:
+            elif pair[0] == '+' and all([b in digits for b in pair[1]]):
                 del k[-1]
                 k.append('+' + pair[1])
             elif pair[0] == 'RE' and (pair[1].startswith('"') or pair[1].startswith("'")):

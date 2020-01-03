@@ -1,0 +1,17 @@
+IMPORT 'functions.mdcl';
+
+(A) : ARRAY;
+(C) : '';
+
+(0) : 0;
+WHILE (0) LT [ LEN FILE ] : {
+    IF FILE INDEX (0) EQ '\' : {
+        (A) : (A) ADD (C);
+        (C) : '';
+    } : ELSE : {
+        (C) : (C) ADD [ FILE INDEX (0) ];
+    };
+    (0) : (0) ADD 1;
+};
+
+(A);

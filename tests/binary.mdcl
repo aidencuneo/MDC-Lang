@@ -1,5 +1,0 @@
-_ READ '> ';
-
-IF _ EQ 'aiden' : 'String is AIDEN.' :
-ELIF _ : 'String is something else, but TRUE.' :
-ELSE   : 'String is FALSE.';
