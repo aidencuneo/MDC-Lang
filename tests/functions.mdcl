@@ -4,3 +4,28 @@ NEW ISTYPE
 : {
     YIELD TYPE $1 EQ $0;
 };
+
+NEW CLI
+: String
+: {
+    YIELD `os.system(${0}.value)`;
+};
+
+NEW JOIN
+: Array
+: * String
+: {
+    (F0) : 0;
+    (FC) : '';
+    WHILE (F0) LT [ LEN $0 ] : {
+        (FC) : (FC) ADD [ $0 INDEX (F0) ];
+        IF $1 : {
+            (FC) : (FC) ADD $1;
+        };
+        (F0) : (F0) ADD 1;
+    };
+    IF $1 : {
+        (FC) : (FC) SUB [ LEN $1 ];
+    };
+    YIELD (FC);
+};
