@@ -52,6 +52,8 @@ if isinstance(code, Exception):
 try:
     run(code, fname, raw=True)
 except (KeyboardInterrupt, EOFError):
-    call_error('KeyboardInterrupt called.', 'ioerr')
+    call_error('KeyboardInterrupt called', 'ioerr')
+except RecursionError:
+    call_error('RecursionError, too many calls back and forth.', 'recursion')
 except Exception as e:
     call_error('', 'fatal')

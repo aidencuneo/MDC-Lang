@@ -5,7 +5,7 @@ First Commit was at: 1/1/2020.
 
 '''
 
-__version__ = '1.3.2'
+__version__ = '1.3.3'
 
 import ast
 import os
@@ -466,6 +466,8 @@ class Array(Datatype):
             self.value = tuple(value)
         elif isinstance(value, Null):
             self.value = tuple()
+        elif isinstance(value, String):
+            self.value = (String(a) for a in value.value)
         elif isinstance(value, builtin_types + (type(None),)):
             self.value = (value,)
 
@@ -488,12 +490,24 @@ class Array(Datatype):
         else:
             return self.value + (other,), Array
 
+    def SUB(self, other):
+        mdc_assert(self, other, (Integer, String), 'SUB')
+        if isinstance(other, Integer):
+            return self.value[:-other.value], Array
+        if isinstance(other, String):
+            self.value.remove(other.value)
+            return self, Array
+
     def INDEX(self, other):
         mdc_assert(self, other, Integer, 'INDEX')
         a = int(BFList.get_length(self).value)
         if int(other.value) > a - 1:
             call_error('Array index out of range, ' + str(other) + ' > ' + str(a - 1) + '.', 'argerr')
         return self.value[other.value], type(self.value[other.value])
+
+    def HAS(self, other):
+        mdc_assert(self, other, builtin_types, 'HAS')
+        return other.value in self.value, Boolean
 
 
 class Null(Datatype):
@@ -502,10 +516,10 @@ class Null(Datatype):
         self.value = None
 
     def __repr__(self):
-        return pformat('null')
+        return pformat('NULL')
 
     def __str__(self):
-        return 'null'
+        return 'NULL'
 
     def __bool__(self):
         return False
@@ -520,6 +534,7 @@ def initialise_path(path):
 def initialise_global_vars(file=None):
     global_vars['FILE'] = String(current_file if file is None else file)
     global_vars['_'] = Null()
+    global_vars[','] = Null()
 
 
 def call_error(text, error_type=None, line=None, showfile=True):
@@ -543,6 +558,12 @@ def call_error(text, error_type=None, line=None, showfile=True):
         e = 'SYNTAX ERROR'
     elif error_type == 'attr':
         e = 'ATTRIBUTE ERROR'
+    elif error_type == 'recursion':
+        e = 'RECURSION ERROR'
+    elif error_type == 'type':
+        e = 'TYPE ERROR'
+    elif error_type == 'value':
+        e = 'VALUE ERROR'
     elif error_type == 'fatal':
         print('A fatal error has occurred which has terminated the runtime environment.')
         print('PYTHON TRACEBACK:')
@@ -551,15 +572,14 @@ def call_error(text, error_type=None, line=None, showfile=True):
             'https://github.com/aidencuneo/MDC-Lang')
         sys.exit()
     thisfile = os.path.abspath(current_file)
-    method = False
-    if thisfile.endswith('METHOD>\n'):
-        method = 'in method ' + pformat(thisfile[thisfile.index('\n<') + 2:-8])
-        thisfile = thisfile[:thisfile.index('\n<')]
+    method = []
+    while thisfile.endswith('METHOD>'):
+        method += [thisfile[rindex(thisfile, '\n') + 1:-7]]
+        thisfile = thisfile[:rindex(thisfile, '\n') - 1:]
     print('> ' + e + (
-        ' at file "' + thisfile + '", ' + (
-            method if method else 'line ' + str(current_line)
-            )
-        if showfile else ''))
+        ' at file "' + thisfile + '", in ' + ', in '.join(
+            method[::-1] if method else ['line ' + str(current_line)])
+        if showfile else '') + ':')
     if not method:
         codeline = loader.get_code('', specificline=current_line, setcode=current_code)
         if isinstance(codeline, str):
@@ -584,7 +604,7 @@ def eval_statement(code, args, error):
     try:
         args = [evaluate([z], error=error) for z in args]
         out = eval(code, (CompactDict({'args': args}) + globals()).as_dict())
-        return eval_datatypes([out])[0]
+        return eval_datatypes([out], error=error, dostrings=True)[0]
     except BaseException as e:
         if isinstance(e, SystemExit):
             print('\nThe following error occurred as a result of the above error:')
@@ -683,9 +703,9 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                     if e:
                         ev = evaluate(runcodes[b], error=code[i], args=localargs)
                         if not isinstance(ev, Null):
-                            sys.stdout.write(str(ev))
-                            if '\n' in str(ev):
-                                sys.stdout.flush()
+                            o += str(ev)
+                            if echo:
+                                sys.stdout.write(str(ev))
                         break
             elif a[0] == 'WHILE':
                 if len(a) < 3:
@@ -698,9 +718,42 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                 while Boolean(evaluate(condition, error=code[i], args=localargs)):
                     ev = evaluate(runcode, error=code[i], args=localargs)
                     if not isinstance(ev, Null):
-                        sys.stdout.write(str(ev))
-                        if '\n' in str(ev):
-                            sys.stdout.flush()
+                        o += str(ev)
+                        if echo:
+                            sys.stdout.write(str(ev))
+            elif a[0] == 'FOR':
+                if len(a) < 3:
+                    call_error('FOR loop requires at least a variable name, iterable, the ":" separator, and code to run.', 'syntax')
+                contents = tuple(filter(None, split_list(a[1:], ':')))
+                if not contents[2:]:
+                    call_error('FOR loop requires at least a variable name, iterable, the ":" separator, and code to run.', 'syntax')
+                variable = contents[0][0]
+                iterable = evaluate(contents[1], error=code[i], args=localargs)
+                runcode = contents[2]
+                if not variable:
+                    call_error('FOR loop variable name can not be empty.', 'syntax')
+                if variable in global_vars and variable != ',':
+                    call_error('Name ' + pformat(variable) + ' is already defined in the global variables list.', 'var')
+                if variable in local_vars:
+                    call_error('Name ' + pformat(variable) + ' is already defined in the local variables list.', 'var')
+                if not iterable:
+                    call_error('FOR loop iterable can not be NULL.', 'syntax')
+                if not runcode:
+                    call_error('FOR loop code to run can not be empty.', 'syntax')
+                if not isinstance(iterable, (Integer, String, Array)):
+                    call_error('FOR loop can only iterate over an Array. FOR loops also support: (Integer, String).', 'type')
+                if isinstance(iterable, Integer):
+                    iterable = range(iterable.value)
+                else:
+                    iterable = iterable.value
+                for value in iterable:
+                    local_vars[variable] = value
+                    global_vars[','] = value
+                    ev = evaluate(runcode, error=code[i], args=localargs)
+                    if not isinstance(ev, Null):
+                        o += str(ev)
+                        if echo:
+                            sys.stdout.write(str(ev))
             else:
                 key = ''.join(a[:a.index(':')])
                 if key.startswith('array[(') and key.endswith(')]'):
@@ -714,7 +767,9 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
         elif a[0] == 'IF':
             call_error('IF statement is missing the ":" separator.', 'syntax')
         elif a[0] == 'WHILE':
-            call_error('WHILE statement is missing the ":" separator.', 'syntax')
+            call_error('WHILE loop is missing the ":" separator.', 'syntax')
+        elif a[0] == 'FOR':
+            call_error('FOR loop is missing the ":" separator.', 'syntax')
         elif a[0] == 'IMPORT':
             if len(a) < 2:
                 call_error('IMPORT statement requires at least one argument.', 'argerr')
@@ -735,12 +790,12 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
             key = a[1].strip()
             if not key:
                 call_error('DEFINE statement key must not be empty.', 'argerr')
-            if key in global_vars:
+            if key in global_vars or key in local_vars:
                 call_error('Constant with key ' + pformat(key) + ' already exists. Constants can not be redefined.', 'syntax')
             value = evaluate(a[2:], error=code[i], args=localargs)
-            global_vars[key] = value
+            local_vars[key] = value
         elif a[0] == 'GOTO':
-            if current_file.endswith('METHOD>\n'):
+            if current_file.endswith('METHOD>'):
                 call_error('GOTO statement can not run in the current scope.', 'syntax')
             if not a[1:]:
                 call_error('GOTO statement requires at least one argument.', 'argerr')
@@ -775,15 +830,13 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                 o += str(a)
                 if echo:
                     sys.stdout.write(str(a))
-                    if '\n' in str(a):
-                        sys.stdout.flush()
         i += 1
     if yielding:
         return yielded
     return o
 
 
-def eval_datatypes(exp, error=None):
+def eval_datatypes(exp, error=None, dostrings=False):
     if not exp:
         return exp
     new = [a for a in exp]
@@ -798,7 +851,7 @@ def eval_datatypes(exp, error=None):
                     new[a] = eval(new[a])
                 except KeyError:
                     call_error('Variable key does not exist.', 'var', '(' + new[a][9:-3] + ')')
-        if isinstance(new[a], tuple([b for b in datatypes_switch.keys() if b != str])):
+        if isinstance(new[a], tuple([b for b in datatypes_switch.keys() if dostrings or b != str])):
             new[a] = datatypes_switch[type(new[a])](new[a])
         if not isinstance(new[a], str):
             pass
@@ -853,7 +906,7 @@ def eval_functions(exp, error=None, args=None):
             oldfile = current_file
             oldcode = current_code
             oldline = current_line
-            current_file = current_file + '\n<' + new[a] + 'METHOD>\n'
+            current_file = current_file + '\n<' + new[a] + 'METHOD>'
             current_code = functions[new[a]].code
             current_line = 1
             new[a] = functions[new[a]].call(f, ex_args=args)
@@ -903,25 +956,64 @@ def evaluate(exp, error=None, args=None):
             except AttributeError:
                 call_error('Type ' + type(new[a - 1]).__name__ + ' does not have a method for handling ' + new[a], 'attr', error)
         elif new[a] == 'AND':
-            if not a > 0:
+            if a - 1 < 0:
                 call_error('AND requires a left hand argument.', 'argerr', error)
-            if not a <= len(new):
+            if a + 1 >= len(new):
                 call_error('AND requires a right hand argument.', 'argerr', error)
             left = evaluate(replacekeys([new[a - 1]], args=args), error=error, args=args)
             right = evaluate(replacekeys([new[a + 1]], args=args), error=error, args=args)
             new[a] = Boolean(Boolean(left) and Boolean(right))
             del new[a + 1]
             del new[a - 1]
+            a -= 1
         elif new[a] == 'OR':
-            if not a > 0:
+            if a - 1 < 0:
                 call_error('OR requires a left hand argument.', 'argerr', error)
-            if not a <= len(new):
+            if a + 1 >= len(new):
                 call_error('OR requires a right hand argument.', 'argerr', error)
             left = evaluate(replacekeys([new[a - 1]], args=args), error=error, args=args)
             right = evaluate(replacekeys([new[a + 1]], args=args), error=error, args=args)
             new[a] = Boolean(Boolean(left) or Boolean(right))
             del new[a + 1]
             del new[a - 1]
+            a -= 1
+        elif new[a] == 'TO':
+            if a + 1 >= len(new):
+                call_error('TO requires a right hand argument.', 'argerr', error)
+            left = evaluate(replacekeys([new[a - 1]], args=args), error=error, args=args) if a > 0 else Integer(0)
+            right = evaluate(replacekeys([new[a + 1]], args=args), error=error, args=args)
+            if not isinstance(left, Integer):
+                call_error('TO requires an Integer as left hand argument.', 'type', error)
+            if not isinstance(right, Integer):
+                call_error('TO requires an Integer as right hand argument.', 'type', error)
+            step = 1
+            if right.value < left.value:
+                step = -1
+                right.value -= 1
+            else:
+                right.value += 1
+            new[a] = Array(tuple(Integer(z) for z in range(left.value, right.value, step)))
+            del new[a + 1]
+            if a > 0:
+                del new[a - 1]
+                a -= 1
+        elif new[a] == 'SKIP':
+            if a - 1 < 0:
+                call_error('SKIP requires a left hand argument.', 'argerr', error)
+            if a + 1 >= len(new):
+                call_error('SKIP requires a right hand argument.', 'argerr', error)
+            left = evaluate(replacekeys([new[a - 1]], args=args), error=error, args=args)
+            right = evaluate(replacekeys([new[a + 1]], args=args), error=error, args=args)
+            if not isinstance(left, Array):
+                call_error('SKIP can only skip items in an Array.', 'type', error)
+            if not isinstance(right, Integer):
+                call_error('SKIP can only skip through an Array using an Integer as index.', 'type', error)
+            if not right.value:
+                call_error('Right hand argument for SKIP can not be 0.', 'value', error)
+            new[a] = Array(left.value[0::right.value])
+            del new[a + 1]
+            del new[a - 1]
+            a -= 1
         elif new[a].startswith('<EVAL>') and new[a].endswith('</EVAL>'):
             new[a] = new[a][6:-7]
             b = new[a].split('\n\\')
@@ -964,13 +1056,15 @@ def evaluate(exp, error=None, args=None):
                 new[a] = Null()
             elif len(value) == 1:
                 new[a] = value[0]
-        elif new[a] in global_vars:            
+        elif new[a] in local_vars:
+            new[a] = local_vars[new[a]]
+        elif new[a] in global_vars:
             new[a] = global_vars[new[a]]
         elif new[a] not in functions:
             token = new[a]
             if len(token) > 100:
                 token = token[:97] + '...'
-            call_error('Invalid or Undefined Token: ' + pformat(token), 'syntax', error)
+            call_error('Undefined Token: ' + pformat(token), 'syntax', error)
         a += 1
     code = ','.join([(type(a).__name__ + '(' + pformat(a) + ')') if isinstance(a, builtin_types) else a for a in new])
     out = code
@@ -1062,6 +1156,15 @@ def split_list(s, split_at):
     return list(filter(None, o + [c]))
 
 
+def rindex(s, i):
+    i = i[0]
+    s = s[::-1]
+    for a in range(len(s)):
+        if s[a] == i:
+            return len(s) - a
+    return -1
+
+
 #
 # BUILTINS
 #
@@ -1077,16 +1180,12 @@ class BFList:
 
     @staticmethod
     def get_length(*args):
-        if not args:
-            call_error('LEN must have at least one argument', 'argerr')
         if isinstance(args[0], builtin_types):
             return Integer(len(args[0].value))
         return Integer(len(args[0]))
 
     @staticmethod
     def readfile(*args):
-        if not args:
-            call_error('READFILE must have at least one argument.', 'argerr')
         if not isinstance(args[0], String):
             call_error('READFILE first argument must be of type String.', 'argerr')
         try:
@@ -1104,6 +1203,16 @@ class BFList:
         if not args:
             args = [Null()]
         return String(type(args[0]).__name__)
+
+    @staticmethod
+    def echo(args):
+        content = String('') if isinstance(args[0], Null) else args[0]
+        sep = args[1] if isinstance(args[1], String) else String(' ')
+        end = args[2] if isinstance(args[2], String) else String('\n')
+        if isinstance(args[0], Array):
+            content = String(sep.value.join([str(a) for a in content.value]))
+        print(content.value, end=end.value)
+        return String('')
 
 
 #
@@ -1129,6 +1238,7 @@ builtin_types = tuple(datatypes_switch.values()) + (
 )
 
 global_vars = CompactDict()
+local_vars = CompactDict()
 array = CompactDict()
 functions = {
     'INTEGER': BuiltinFunction('INTEGER',
@@ -1147,7 +1257,7 @@ functions = {
         [[Integer, '*']],
         Boolean),
     'ARRAY': BuiltinFunction('ARRAY',
-        ['@'],
+        [['@']],
         Array),
     'NULL': BuiltinFunction('NULL',
         [],
@@ -1165,6 +1275,9 @@ functions = {
     'TYPE': BuiltinFunction('TYPE',
         [['@']],
         BFList.get_type),
+    'ECHO': BuiltinFunction('ECHO',
+        [['@'], ['*', 'String'], ['*', 'String']],
+        BFList.echo),
 
     'NOT': BuiltinFunction('NOT',
         [['@']],

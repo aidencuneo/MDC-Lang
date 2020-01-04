@@ -1,38 +1,8 @@
 IMPORT 'functions.mdcl';
 
-NEW MAIN : {
+(0) : 'hi\hey\heya\yo';
+(1) : SPLIT (0) '\';
 
-    (A) : ARRAY;
-    (C) : '';
-
-    (0) : 0;
-    WHILE (0) LT [ LEN FILE ] : {
-        IF FILE INDEX (0) EQ '\' : {
-            (A) : (A) ADD (C);
-            (C) : '';
-        }:ELSE:{
-            (C) : (C) ADD [ FILE INDEX (0) ];
-        };
-        (0) : (0) ADD 1;
-    };
-
-    (C) : '';
-
-    (0) : 0;
-    WHILE (0) LT [ LEN (A) ] : {
-        (1) : (A) INDEX (0);
-        IF (1) HAS ':' AND [ NOT (0) ] : {
-            (C) : (C) ADD (1) ADD "\n";
-        }:ELSE:{
-            (C) : (C) ADD 'cd ' ADD (1) ADD "\n";
-        };
-        (0) : (0) ADD 1;
-    };
-
-    YIELD "Instructions to get to this file:\n\n";
-    YIELD (C) ADD 'mdcl ' ADD FILE;
-
+FOR , : (1) : {
+    ECHO ,;
 };
-
-(A) : MAIN;
-JOIN (A);
