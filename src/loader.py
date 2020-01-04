@@ -43,6 +43,10 @@ def count_lines(fname):
         return e
 
 
+def isnum(num):
+    return all([b in digits for b in num])
+
+
 def tokenise(line):
     sq = False
     dq = False
@@ -66,7 +70,10 @@ def tokenise(line):
         elif a in whitespace:
             p = 'W'
         if (q != p and p != 'W' or p == 'S') and not (
-        sq or dq or bt or rb or sb > 0 or cb > 0 or lg > 0):
+            t == '.' and p == 'D'
+        ) and not (
+            sq or dq or bt or rb or sb > 0 or cb > 0 or lg > 0
+        ):
             l.append(o.strip())
             o = ''
         if a == "'" and not dq:
@@ -107,18 +114,21 @@ def tokenise(line):
     for a in list(filter(None, l + [o])):
         pair.append(a)
         if pair[1:]:
-            if pair[0] == '$' and all([b in digits for b in pair[1]]):
+            if pair[0] == '$' and isnum(pair[1]):
                 del k[-1]
                 k.append('$' + pair[1])
-            elif pair[0] == '-' and all([b in digits for b in pair[1]]):
+            elif pair[0] == '-' and isnum(pair[1]):
                 del k[-1]
                 k.append('-' + pair[1])
-            elif pair[0] == '+' and all([b in digits for b in pair[1]]):
+            elif pair[0] == '+' and isnum(pair[1]):
                 del k[-1]
                 k.append('+' + pair[1])
             elif pair[0] == 'RE' and (pair[1].startswith('"') or pair[1].startswith("'")):
                 del k[-1]
                 k.append('RE' + pair[1])
+            elif isnum(pair[0]) and pair[1][0] == '.' and isnum(pair[1][1:]):
+                del k[-1]
+                k.append(pair[0] + pair[1])
             else:
                 k.append(a)
             del pair[0]

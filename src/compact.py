@@ -49,6 +49,9 @@ class CompactList:
     
     def __delattr__(self, index):
         self.delete_from(index)
+
+    def __delitem__(self, index):
+        self.delete_from(index)
     
     def __contains__(self, item):
         return item in self._value
@@ -107,6 +110,9 @@ class CompactDict:
 
     def __setitem__(self, key, value):
         return self.setitem(key, value)
+
+    def __delitem__(self, key):
+        self.delete_key(key)
     
     def __contains__(self, key):
         return key in self.as_dict()

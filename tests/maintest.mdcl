@@ -1,8 +1,7 @@
 IMPORT 'functions.mdcl';
 
-(0) : 'hi\hey\heya\yo';
-(1) : SPLIT (0) '\';
-
-FOR , : (1) : {
-    ECHO ,;
+TRY {
+    ECHO [ READFILE 'cdskjncsjkd' ];
+} : CATCH 'ioerr' 'syntax' : {
+    ECHO 'That file does not exist.';
 };
