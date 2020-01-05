@@ -1,7 +1,9 @@
 IMPORT 'functions.mdcl';
 
 TRY {
-    ECHO [ READFILE 'cdskjncsjkd' ];
-} : CATCH 'ioerr' 'syntax' : {
+    ECHO [ READFILE [ READ '> ' ] ];
+} : CATCH 'ioerr' : {
     ECHO 'That file does not exist.';
+} : CATCH 'keyboardinterrupt' : {
+    ECHO 'KeyboardInterrupt.';
 };

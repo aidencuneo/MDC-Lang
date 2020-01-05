@@ -64,7 +64,6 @@ class BuiltinFunction(Function):
 
     def call(self, args, ex_args=None):
         args = self.check_args(args)
-        print('ARGS', self.name, 'ARGS', args[:len(self.args)], ex_args, 'ARGS')
         r = self.code([evaluate(args[:len(self.args)], args=ex_args)][0])
         global_vars['_'] = r
         return r
@@ -557,19 +556,20 @@ def initialise_global_vars(file=None):
     global_vars['FILE'] = String(current_file if file is None else file)
     global_vars['_'] = Null()
     global_vars[','] = Null()
+    global_vars['ERR'] = Null()
 
 
 def call_error(text=None, error_type=None, line=None, args=None, showfile=True):
     original_error = error_type
     if isinstance(line, (list, tuple)):
         line = ' '.join([str(a) for a in line])
-    if error_type in current_catch:
-        output = evaluate(current_catch[error_type], args=args)
-        return
     if isinstance(error_type, MDCLError):
         er = str(error_type)
         error_type = er[:er.index('::')]
         text = er[er.index('::') + 2:]
+    global_vars['ERR'] = String(error_type)
+    if current_catch:
+        raise MDCLError(error_type + '::' + text)
     e = 'ERROR'
     if error_type == 'eval':
         e = 'ERROR attempting to run eval statement'
@@ -593,6 +593,8 @@ def call_error(text=None, error_type=None, line=None, args=None, showfile=True):
         e = 'TYPE ERROR'
     elif error_type == 'value':
         e = 'VALUE ERROR'
+    elif error_type == 'keyboardinterrupt':
+        e = 'KEYBOARD INTERRUPT'
     elif error_type == 'fatal':
         print('A fatal error has occurred which has terminated the runtime environment.')
         print('PYTHON TRACEBACK:')
@@ -622,7 +624,8 @@ def call_error(text=None, error_type=None, line=None, args=None, showfile=True):
         print('Your call_error call is missing the text argument. '
             'Ensure that you have a value other than None as the text argument '
             'for your call_error call.')
-    print('  :: ' + text)
+    if text and error_type != 'keyboardinterrupt':
+        print('  :: ' + text)
     sys.exit()
 
 
@@ -840,14 +843,20 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                             if echo:
                                 sys.stdout.write(str(ev))
                 except MDCLError as e:
-                    if str(e) in catches:
-                        print('could not stop:')
-                        print(catches[str(e)])
-                        exit()
+                    e = str(e)
+                    e = e[:e.index('::')]
+                    if e in current_catch:
+                        ev = evaluate(current_catch[e], error=code[i], args=localargs)
+                        if not isinstance(ev, Null):
+                            if yielding:
+                                yielded += [ev]
+                            else:
+                                o += str(ev)
+                                if echo:
+                                    sys.stdout.write(str(ev))
                     else:
-                        call_error('TRY statement failed to block an error.', e)
+                        call_error(error_type=e)
                 current_catch = oldcatch
-                print('DONE')
             else:
                 key = ''.join(a[:a.index(':')])
                 if key.startswith('array[(') and key.endswith(')]'):
@@ -865,7 +874,7 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
         elif a[0] == 'FOR':
             call_error('FOR loop is missing the ":" separator.', 'syntax')
         elif a[0] == 'TRY':
-            call_error('TRY statement is missing the ":" separator.', 'syntax')
+            call_error('TRY statement is missing a catch.', 'syntax')
         elif a[0] == 'CATCH':
             call_error('CATCH keyword can not be placed separately to TRY statement.', 'syntax')
         elif a[0] == 'IMPORT':
@@ -1000,7 +1009,6 @@ def eval_functions(exp, error=None, args=None):
                 new[a] = global_args[key]
         elif new[a] in functions:
             limit = len(functions[new[a]].args)
-            print('function', functions[new[a]].name, new)
             f = evaluate(new[a + 1:a + 1 + limit], error=error, args=args)
             if not isinstance(f, (tuple, list)):
                 f = f,
@@ -1203,9 +1211,6 @@ def evaluate(exp, error=None, args=None):
                 token = token[:97] + '...'
             call_error('Undefined Token: ' + pformat(token), 'syntax', error)
         a += 1
-    print('code', new, [type(a) for a in new])
-    if isinstance(new[0], str):
-        raise Exception
     code = ','.join([(type(a).__name__ + '(' + pformat(a) + ')') if isinstance(a, builtin_types) else a for a in new if a is not None])
     out = code
     if code and code != ',':
@@ -1216,7 +1221,6 @@ def evaluate(exp, error=None, args=None):
             print(exp)
             print(new)
             print(code)
-            raise Exception
             call_error(str(e), 'exp', error)
     return out
 
