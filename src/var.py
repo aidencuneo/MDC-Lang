@@ -423,7 +423,8 @@ class String(Datatype):
         if isinstance(other, String):
             return self.value == other.value, Boolean
         if isinstance(other, RegexString):
-            return self.value == str(other.value.pattern), Boolean
+            a = other.value.match(self.value)
+            return bool(a) if a else 0, Boolean
         if isinstance(other, Boolean):
             return bool(self.value), Boolean
         if isinstance(other, Null):
@@ -433,7 +434,7 @@ class String(Datatype):
         mdc_assert(self, other, Integer, 'INDEX')
         a = int(BFList.get_length(self).value)
         if int(other.value) > a - 1:
-            call_error('String index out of range, ' + str(other) + ' > ' + str(a - 1) + '.', 'argerr')
+            call_error('String index out of range, ' + str(other) + ' > ' + str(a - 1) + '.', 'outofrange')
         return self.value[other.value], String
 
     def HAS(self, other):
@@ -549,7 +550,7 @@ class Array(Datatype):
         mdc_assert(self, other, Integer, 'INDEX')
         a = int(BFList.get_length(self).value)
         if int(other.value) > a - 1:
-            call_error('Array index out of range, ' + str(other) + ' > ' + str(a - 1) + '.', 'argerr')
+            call_error('Array index out of range, ' + str(other) + ' > ' + str(a - 1) + '.', 'outofrange')
         return self.value[other.value], type(self.value[other.value])
 
     def HAS(self, other):
@@ -627,6 +628,8 @@ def call_error(text=None, error_type=None, line=None, args=None, showfile=True):
         e = 'UNKNOWN VALUE'
     elif error_type == 'filenotfound':
         e = 'FILE NOT FOUND ERROR'
+    elif error_type == 'outofrange':
+        e = 'OUT OF RANGE ERROR'
     elif error_type == 'fatal':
         if not text:
             print('A fatal error has occurred which has terminated the runtime environment.')
@@ -648,19 +651,19 @@ def call_error(text=None, error_type=None, line=None, args=None, showfile=True):
         print('\n> ' + e + ' (' + error_type + ') ' + (
             'at file "' + thisfile + '", in ' + ', in '.join(
                 method[::-1] if method else ['line ' + str(current_line)])
-            if showfile else '') + ':')
+            if showfile else '') + (':' if text else ' <'))
     if not method:
         codeline = loader.get_code('', specificline=current_line, setcode=current_code)
         if isinstance(codeline, str):
             print('  -> ' + codeline.strip())
     if line:
         print('  ~~ ' + line)
-    if text is None:
+    if text and error_type != 'keyboardinterrupt':
+        print('  :: ' + text)
+    elif text is None and error_type != 'keyboardinterrupt':
         print('Your call_error call is missing the text argument. '
             'Ensure that you have a value other than None as the text argument '
             'for your call_error call.')
-    if text and error_type != 'keyboardinterrupt':
-        print('  :: ' + text)
     sys.exit()
 
 
@@ -756,7 +759,7 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                 if con[b][0] == 'IF':
                     call_error('IF can not be placed after ELIF or ELSE in the same chain.', 'syntax')
                 elif con[b][0] == 'ELIF':
-                    if len(con[b]) < 2 or b + 2 >= len(con):
+                    if len(con[b]) < 2 or b + 1 >= len(con):
                         call_error('ELIF statement requires at least a condition, the ":" separator, and code to run.', 'syntax')
                     if haselse:
                         call_error('ELIF can not be placed after ELSE in the same chain.', 'syntax')
@@ -833,6 +836,8 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                 call_error('FOR loop can only iterate over an Array, Integer, or String.', 'type')
             if isinstance(iterable, Integer):
                 iterable = range(iterable.value)
+            elif isinstance(iterable, String):
+                iterable = Array(iterable).value
             else:
                 iterable = iterable.value
             for value in iterable:
@@ -895,14 +900,15 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                         if echo:
                             sys.stdout.write(str(ev))
             except (KeyboardInterrupt, EOFError):
-                ev = perform_try_catch(MDCLError('keyboardinterrupt::'), error=code[i], args=localargs)
-                if not isinstance(ev, Null):
-                    if yielding:
-                        yielded += [ev]
-                    else:
-                        o += str(ev)
-                        if echo:
-                            sys.stdout.write(str(ev))
+                if sig_c.switches['INT']:
+                    ev = perform_try_catch(MDCLError('keyboardinterrupt::'), error=code[i], args=localargs)
+                    if not isinstance(ev, Null):
+                        if yielding:
+                            yielded += [ev]
+                        else:
+                            o += str(ev)
+                            if echo:
+                                sys.stdout.write(str(ev))
             except RecursionError:
                 call_error('RecursionError, too many calls back and forth.', 'recursion')
             except Exception as e:
@@ -941,6 +947,7 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
             value = evaluate(a[2:], error=code[i], args=localargs)
             local_vars[key] = value
         elif a[0] == 'SIG':
+            a = evaluate_line(a, start=2, error=code[i], args=localargs)
             if len(a) < 2:
                 call_error('SIG statement requires at least a signal name.', 'argerr')
             signal_name = a[1].strip()
@@ -948,12 +955,12 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                 call_error('Signal ' + pformat(signal_name) + ' is not a valid signal.', 'unknownvalue')
             newvalue = not sig_c.switches[signal_name]
             if len(a) > 2:
-                newvalue = Boolean(evaluate(a[2:], error=code[i], args=localargs)).value.value
+                newvalue = Boolean(a[2]).value.value
             if not isinstance(newvalue, bool):
                 call_error('SIG statement new value must evaluate to Boolean.', 'type')
             sig_c.switches[signal_name] = newvalue
         elif a[0] == 'RAISE':
-            a[1:] = evaluate(a[1:], error=code[i], args=localargs)
+            a = evaluate_line(a, start=1, error=code[i], args=localargs)
             errortag = String('')
             errortext = String('')
             if len(a) > 1:
@@ -971,7 +978,7 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
             yielded += [evaluate(a[1:], error=code[i], args=localargs)]
         else:
             a = evaluate(a, error=code[i], args=localargs)
-            if type(a) in builtin_types:
+            if isinstance(a, builtin_types):
                 o += str(a)
                 if echo:
                     sys.stdout.write(str(a))
@@ -1012,7 +1019,7 @@ def eval_datatypes(exp, error=None, dostrings=False):
                 new[a] = String(ast.literal_eval(new[a]))
             except Exception:
                 call_error('Invalid String.', 'syntax', error)
-        elif re.match('^(-|\+)*[0-9]*.[0-9]+', new[a]): # Is new[a] a float? If so, assign Float() class.
+        elif re.match('^(-|\+)*[0-9]*\.[0-9]+', new[a]): # Is new[a] a float? If so, assign Float() class.
             new[a] = Float(new[a])
         elif re.match('^(-|\+)*[0-9]+', new[a]): # Is new[a] an integer? If so, assign Integer() class.
             new[a] = Integer(new[a])
@@ -1039,11 +1046,11 @@ def eval_functions(exp, error=None, args=None):
             key = int(new[a][5:-1])
             if args:
                 if key >= len(args):
-                    call_error('Local argument list index out of range, ' + str(key) + ' > ' + str(len(args) - 1) + '.', 'argerr', error)
+                    call_error('Local argument list index out of range, ' + str(key) + ' > ' + str(len(args) - 1) + '.', 'outofrange', error)
                 new[a] = args[key]
             else:
                 if key >= len(global_args):
-                    call_error('Global argument list index out of range, ' + str(key) + ' > ' + str(len(global_args) - 1) + '.', 'argerr', error)
+                    call_error('Global argument list index out of range, ' + str(key) + ' > ' + str(len(global_args) - 1) + '.', 'outofrange', error)
                 new[a] = global_args[key]
         elif new[a] in functions:
             limit = len(functions[new[a]].args)
@@ -1063,6 +1070,17 @@ def eval_functions(exp, error=None, args=None):
             del new[a + 1:a + 1 + limit]
         a += 1
     return new
+
+
+def evaluate_line(oldline, start, end=None, error=None, args=None):
+    if end is None:
+        end = len(oldline)
+    new_line = evaluate(replacekeys(oldline[start:end], args=args), error=error, args=args)
+    if isinstance(new_line, (tuple, list)):
+        oldline[start:end] = new_line
+    else:
+        oldline[start] = new_line
+    return oldline
 
 
 def evaluate(exp, error=None, args=None):
@@ -1120,7 +1138,7 @@ def evaluate(exp, error=None, args=None):
             if a + 1 >= len(new):
                 call_error('OR requires a right hand argument.', 'argerr', error)
             left = evaluate(replacekeys([new[a - 1]], args=args), error=error, args=args)
-            right = evaluate(replacekeys([new[a + 1]], args=args), error=error, args=args)
+            right = evaluate_line(new, start=a + 1, error=error, args=args)[a + 1]#evaluate(replacekeys([new[a + 1]], args=args), error=error, args=args)
             new[a] = Boolean(Boolean(left) or Boolean(right))
             del new[a + 1]
             del new[a - 1]
@@ -1207,9 +1225,9 @@ def evaluate(exp, error=None, args=None):
                 call_error('Unmatched ' + pformat('>') + '.', 'syntax', error)
             if not new[a].endswith('>'):
                 call_error('Unmatched ' + pformat('<') + '.', 'syntax', error)
-            if not a > 0:
+            if a - 1 < 0:
                 call_error('Shorthand condition requires a left hand argument.', 'argerr', error)
-            if not a <= len(new):
+            if a + 1 >= len(new):
                 call_error('Shorthand condition requires a right hand argument.', 'argerr', error)
             condition = evaluate(replacekeys(loader.tokenise(new[a][1:-1].strip()), args=args), error=error, args=args)
             r = replacekeys(loader.tokenise(new[a][1:-1].strip()), args=args)
@@ -1291,7 +1309,7 @@ def replacekeys(line, args=None):
             if args is not None:
                 key = int(line[a][5:-1])
                 if key >= len(args):
-                    call_error('Local argument list index out of range, ' + str(key) + ' > ' + str(len(args) - 1) + '.', 'argerr', line)
+                    call_error('Local argument list index out of range, ' + str(key) + ' > ' + str(len(args) - 1) + '.', 'outofrange', line)
                 line[a] = args[key]
         elif line[a].startswith('`') and line[a].endswith('`'):
             line[a] = '<EVAL>' + replaceargs(line[a][1:-1]) + '\n\\' + pformat(line[a]) + '</EVAL>'
