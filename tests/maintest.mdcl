@@ -1,9 +1,13 @@
 IMPORT 'functions.mdcl';
 
+SIG INT 0;
+
+RAISE 'filenot' ADD 'found' 'File not found.';
+
 TRY {
     ECHO [ READFILE [ READ '> ' ] ];
-} : CATCH 'ioerr' : {
+} : CATCH 'filenotfound' : {
     ECHO 'That file does not exist.';
-} : CATCH 'keyboardinterrupt' : {
-    ECHO 'KeyboardInterrupt.';
+} : CATCH 'ioerr' : {
+    ECHO 'Error reading from that file.';
 };

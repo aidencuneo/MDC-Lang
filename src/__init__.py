@@ -5,7 +5,8 @@ First Commit was at: 1/1/2020.
 
 '''
 
-import os.path
+import os
+import signal
 import sys
 
 fname = []
@@ -23,7 +24,7 @@ if fname:
     fname = fname[0]
 
 from loader import get_code
-from var import get_input, call_error, initialise_path, run, __version__
+from var import MDCLError, sig_c, get_input, call_error, initialise_path, run, __version__
 
 if options:
     if '-v' in options:
@@ -51,9 +52,11 @@ if isinstance(code, Exception):
 
 try:
     run(code, fname, raw=True)
+except MDCLError as e:
+    call_error(error_type=e)
 except (KeyboardInterrupt, EOFError):
-    call_error('', 'keyboardinterrupt')
+    sig_c.send('SIGINT')
 except RecursionError:
     call_error('RecursionError, too many calls back and forth.', 'recursion')
 except Exception as e:
-    call_error('', 'fatal')
+    call_error(error_type='fatal')
