@@ -1,0 +1,5 @@
+NEW CHOICE
+: Array
+: {
+    YIELD `random.choice(${0}.value)`;
+};

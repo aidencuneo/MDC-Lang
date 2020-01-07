@@ -47,6 +47,10 @@ def isnum(num):
     return all([b in digits for b in num])
 
 
+def isword(word):
+    return all([b in alphabet for b in word])
+
+
 def tokenise(line):
     sq = False
     dq = False
@@ -70,7 +74,7 @@ def tokenise(line):
         elif a in whitespace:
             p = 'W'
         if (q != p and p != 'W' or p == 'S') and not (
-            t == '.' and p == 'D'
+            t == '.' and p in 'AD'
         ) and not (
             sq or dq or bt or rb or sb > 0 or cb > 0 or lg > 0
         ):
@@ -127,6 +131,9 @@ def tokenise(line):
                 del k[-1]
                 k.append('RE' + pair[1])
             elif isnum(pair[0]) and pair[1][0] == '.' and isnum(pair[1][1:]):
+                del k[-1]
+                k.append(pair[0] + pair[1])
+            elif isword(pair[0]) and pair[1][0] == '.' and isword(pair[1][1:]):
                 del k[-1]
                 k.append(pair[0] + pair[1])
             else:

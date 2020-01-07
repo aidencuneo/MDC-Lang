@@ -5,16 +5,18 @@ First Commit was at: 1/1/2020.
 
 '''
 
-__version__ = '1.3.4'
+__version__ = '1.3.6'
 
 import ast
 import os
+import random
 import re
 import signal
 import sys
 import string
 import traceback as tb
 
+from copy import copy
 from functools import partial
 from pprint import pformat
 
@@ -82,6 +84,8 @@ class Function:
         return args
 
     def call(self, args, ex_args=None):
+        if isinstance(args, Array):
+            args = args.value
         if ex_args:
             args += ex_args
         args = self.check_args(args)
@@ -93,8 +97,15 @@ class Function:
 class BuiltinFunction(Function):
 
     def call(self, args, ex_args=None):
+        if args[0] is None:
+            raise None
+        if isinstance(args, Array):
+            args = args.value
         args = self.check_args(args)
-        r = self.code([evaluate(args[:len(self.args)], args=ex_args)][0])
+        funcargs = evaluate(args[:len(self.args)], args=ex_args)
+        if not isinstance(funcargs, Array):
+            funcargs = Array((funcargs,))
+        r = self.code(funcargs)
         global_vars['_'] = r
         return r
 
@@ -293,30 +304,30 @@ class Float(Datatype):
 
     def ADD(self, other):
         mdc_assert(self, other, (Integer, Float), 'ADD')
-        return self.value + other.value, type(other)
+        return self.value + other.value, Float
 
     def SUB(self, other):
         mdc_assert(self, other, (Integer, Float), 'SUB')
-        return self.value - other.value, type(other)
+        return self.value - other.value, Float
 
     def MULT(self, other):
         mdc_assert(self, other, (Integer, Float, Boolean), 'SUB')
         if isinstance(other, (Integer, Float)):
-            return self.value * other.value, type(other)
+            return self.value * other.value, Float
         if isinstance(other, Boolean):
             return self.value * other.value.value, Integer
 
     def DIV(self, other):
         mdc_assert(self, other, (Integer, Float, Boolean), 'DIV')
         if isinstance(other, (Integer, Float)):
-            return self.value / other.value, type(other)
+            return self.value / other.value, Float
         if isinstance(other, Boolean):
             return self.value * int(not other.value.value), Integer
 
     def PWR(self, other):
         mdc_assert(self, other, (Integer, Float, Boolean), 'PWR')
         if isinstance(other, (Integer, Float)):
-            return self.value ** other.value, type(other)
+            return self.value ** other.value, Float
         if isinstance(other, Boolean):
             return self.value ** other.value.value, Integer
 
@@ -388,8 +399,13 @@ class String(Datatype):
         return self.value
 
     def ADD(self, other):
-        mdc_assert(self, other, String, 'ADD')
-        return self.value + other.value, String
+        mdc_assert(self, other, (Integer, Float, String, Array), 'ADD')
+        if isinstance(other, (Integer, Float)):
+            return self.value + str(other.value), String
+        if isinstance(other, String):
+            return self.value + other.value, String
+        if isinstance(other, Array):
+            return (self.value,) + other.value, Array
 
     def SUB(self, other):
         mdc_assert(self, other, (Integer, String), 'SUB')
@@ -496,25 +512,20 @@ class Boolean(Datatype):
 class Array(Datatype):
 
     def __init__(self, value=None):
-        mdc_assert(self, value, (int, float, str, bool, tuple, list, type(None)) + builtin_types, 'ARRAY', showname=False)
-        if isinstance(value, int):
-            self.value = (Integer(value),)
-        elif isinstance(value, float):
-            self.value = (Float(value),)
-        elif isinstance(value, str):
-            self.value = (String(value),)
-        elif isinstance(value, bool):
-            self.value = (Boolean(value),)
-        elif isinstance(value, (tuple, list)):
+        mdc_assert(self, value, (tuple, list) + builtin_types, 'ARRAY', showname=False)
+        if isinstance(value, (tuple, list)):
             self.value = tuple(value)
-        elif isinstance(value, Null):
-            self.value = tuple()
         elif isinstance(value, String):
             self.value = (String(a) for a in value.value)
-        elif isinstance(value, builtin_types + (type(None),)):
+        elif isinstance(value, (Array, Alphabet)):
+            self.value = tuple(value.value)
+        elif isinstance(value, Null):
+            self.value = tuple()
+        elif isinstance(value, builtin_types):
             self.value = (value,)
 
     def __repr__(self):
+        return self.__str__()
         return '[' + ', '.join(
             (type(a).__name__ + '(' + pformat(a) + ')')
             if isinstance(a, builtin_types) else pformat(a)
@@ -558,6 +569,49 @@ class Array(Datatype):
         return any(a.value == other.value for a in self.value), Boolean
 
 
+class Alphabet(Datatype):
+
+    def __init__(self, value=None):
+        mdc_assert(self, value, (tuple, list) + builtin_types, 'ALPHABET', showname=False)
+        if isinstance(value, set):
+            self.value = value
+        elif isinstance(value, Alphabet):
+            self.value = value.value
+        elif isinstance(value, Array):
+            self.value = set(value.value)
+        elif isinstance(value, String):
+            self.value = set([String(a) for a in value.value])
+        else:
+            self.value = set((value,))
+        self.check()
+
+    def __repr__(self):
+        return '{' + ', '.join(
+            (type(a).__name__ + '(' + pformat(a) + ')')
+            if isinstance(a, builtin_types) else pformat(a)
+            for a in self.value) + '}'
+
+    def __str__(self):
+        return '{' + ', '.join(pformat(a) for a in self.value) + '}'
+
+    def __bool__(self):
+        return bool(self.value)
+
+    def check(self):
+        has = []
+        print([x.value for x in self.value])
+        exit()
+        temp = sorted(list(self.value), key=lambda x: x.value)
+        a = 0
+        while a < len(temp):
+            if temp[a].value in has:
+                self.value.remove(temp[a])
+                temp.remove(temp[a])
+            else:
+                has += [temp[a].value]
+                a += 1
+
+
 class Null(Datatype):
 
     def __init__(self, *args):
@@ -572,19 +626,121 @@ class Null(Datatype):
     def __bool__(self):
         return False
 
+    def ADD(self, other):
+        return other.value, type(other)
+
+    def SUB(self, other):
+        mdc_assert(self, other, (Integer, Float, String, Boolean, Array, Null))
+        if isinstance(other, (Integer, Float)):
+            return - other.value, type(other)
+        if isinstance(other, String):
+            return other.value[::-1], String
+        if isinstance(other, Boolean):
+            return not other.value.value, Boolean
+        if isinstance(other, Array):
+            return other.value[::-1], Array
+        if isinstance(other, Null):
+            return None, Null
+
+    def MULT(self, other):
+        return None, Null
+
+    def DIV(self, other):
+        return None, Null
+
+    def PWR(self, other):
+        return None, Null
+
+    def MOD(self, other):
+        return None, Null
+
+    def EQ(self, other):
+        mdc_assert(self, other, builtin_types, 'EQ')
+        if isinstance(other, (Integer, Float, String, Array, Alphabet)):
+            return not other.value, Boolean
+        if isinstance(other, RegexString):
+            return not str(other.value.pattern), Boolean
+        if isinstance(other, Boolean):
+            return not other.value.value, Boolean
+        if isinstance(other, Null):
+            return True, Boolean
+        return not other.value, Boolean
+
+    def LT(self, other):
+        mdc_assert(self, other, builtin_types, 'LT')
+        if isinstance(other, (Integer, Float)):
+            return 0 < other.value, Boolean
+        if isinstance(other, (String, Array, Alphabet)):
+            return other.value, Boolean
+        if isinstance(other, RegexString):
+            return str(other.value.pattern), Boolean
+        if isinstance(other, Boolean):
+            return 0 < other.value.value, Boolean
+        if isinstance(other, Null):
+            return False, Boolean
+        return bool(other.value), Boolean
+
+    def GT(self, other):
+        mdc_assert(self, other, builtin_types, 'GT')
+        if isinstance(other, (Integer, Float)):
+            return 0 > other.value, Boolean
+        if isinstance(other, (String, Array, Alphabet)):
+            return not value.value, Boolean
+        if isinstance(other, RegexString):
+            return not str(other.value.pattern), Boolean
+        if isinstance(other, Boolean):
+            return False, Boolean
+        if isinstance(other, Null):
+            return False, Boolean
+        return not other.value, Boolean
+
+    def LE(self, other):
+        mdc_assert(self, other, builtin_types, 'LE')
+        if isinstance(other, (Integer, Float)):
+            return 0 <= other.value, Boolean
+        return True, Boolean
+
+    def GE(self, other):
+        mdc_assert(self, other, builtin_types, 'GE')
+        if isinstance(other, (Integer, Float)):
+            return 0 >= other.value, Boolean
+        if isinstance(other, (String, Array, Alphabet)):
+            return not value.value, Boolean
+        if isinstance(other, RegexString):
+            return not str(other.value.pattern), Boolean
+        if isinstance(other, Boolean):
+            return 0 >= other.value.value, Boolean
+        if isinstance(other, Null):
+            return False, Boolean
+        return not other.value, Boolean
+
+    def INDEX(self, other):
+        return None, Null
+
+    def HAS(self, other):
+        return False, Boolean
+
 
 class MDCLError(Exception):
     pass
 
 
-def initialise_path(path):
-    if not os.path.isdir(path):
-        call_error("The path: '" + str(path) + "' could not be found.", 'ioerr')
-    os.chdir(path)
+def initialise_path(src_path, local_path):
+    if not os.path.isdir(src_path):
+        call_error("The path: '" + str(src_path) + "' could not be found.", 'dirnotfound')
+    if not os.path.isdir(local_path):
+        call_error("The path: '" + str(local_path) + "' could not be found.", 'dirnotfound')
+    os.chdir(local_path)
+    global_vars['PATH'] = Array([
+        String(local_path),
+        String(os.path.abspath(src_path + '/builtins')),
+        String(src_path),
+    ])
 
 
 def initialise_global_vars(file=None):
     global_vars['FILE'] = String(current_file if file is None else file)
+    global_vars['LINE'] = Integer(1)
     global_vars['_'] = Null()
     global_vars[','] = Null()
     global_vars['ERR'] = Null()
@@ -600,37 +756,7 @@ def call_error(text=None, error_type=None, line=None, args=None, showfile=True):
         text = er[er.index('::') + 2:]
     global_vars['ERR'] = String(error_type)
     e = 'ERROR'
-    if error_type == 'eval':
-        e = 'ERROR attempting to run eval statement'
-    elif error_type == 'exp':
-        e = 'ERROR attempting to evaluate expression'
-    elif error_type == 'ioerr':
-        e = 'IOERROR'
-    elif error_type == 'argerr':
-        e = 'ARGUMENT ERROR'
-    elif error_type == 'assert':
-        e = 'ASSERTION ERROR'
-    elif error_type == 'var':
-        e = 'VAR ERROR'
-    elif error_type == 'syntax':
-        e = 'SYNTAX ERROR'
-    elif error_type == 'attr':
-        e = 'ATTRIBUTE ERROR'
-    elif error_type == 'recursion':
-        e = 'RECURSION ERROR'
-    elif error_type == 'type':
-        e = 'TYPE ERROR'
-    elif error_type == 'value':
-        e = 'VALUE ERROR'
-    elif error_type == 'keyboardinterrupt':
-        e = 'KEYBOARD INTERRUPT'
-    elif error_type == 'unknownvalue':
-        e = 'UNKNOWN VALUE'
-    elif error_type == 'filenotfound':
-        e = 'FILE NOT FOUND ERROR'
-    elif error_type == 'outofrange':
-        e = 'OUT OF RANGE ERROR'
-    elif error_type == 'fatal':
+    if error_type == 'fatal':
         if not text:
             print('A fatal error has occurred which has terminated the runtime environment.')
             print('PYTHON TRACEBACK:')
@@ -640,6 +766,8 @@ def call_error(text=None, error_type=None, line=None, args=None, showfile=True):
                 'https://github.com/aidencuneo/MDC-Lang')
             sys.exit()
         e = 'FATAL ERROR'
+    elif error_type in error_tags:
+        e = error_tags[error_type]
     if error_type in current_catch and not isinstance(original_error, MDCLError):
         raise MDCLError(error_type + '::' + (text if text is not None else ''))
     thisfile = os.path.abspath(current_file)
@@ -651,7 +779,7 @@ def call_error(text=None, error_type=None, line=None, args=None, showfile=True):
         print('\n> ' + e + ' (' + error_type + ') ' + (
             'at file "' + thisfile + '", in ' + ', in '.join(
                 method[::-1] if method else ['line ' + str(current_line)])
-            if showfile else '') + (':' if text else ' <'))
+            if showfile else '') + (':' if text or not method else ' <'))
     if not method:
         codeline = loader.get_code('', specificline=current_line, setcode=current_code)
         if isinstance(codeline, str):
@@ -671,6 +799,7 @@ def perform_try_catch(e, error=None, args=None):
     er = str(e)
     er = er[:er.index('::')]
     if er in current_catch:
+        global_vars['ERR'] = String(er)
         return evaluate(current_catch[er], error=error, args=args)
     else:
         call_error(error_type=e)
@@ -910,42 +1039,88 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                             if echo:
                                 sys.stdout.write(str(ev))
             except RecursionError:
-                call_error('RecursionError, too many calls back and forth.', 'recursion')
+                ev = perform_try_catch(MDCLError('recursion::Too many recursive calls in a row.'), error=code[i], args=localargs)
+                if not isinstance(ev, Null):
+                    if yielding:
+                        yielded += [ev]
+                    else:
+                        o += str(ev)
+                        if echo:
+                            sys.stdout.write(str(ev))
             except Exception as e:
                 call_error(error_type='fatal')
             current_catch = oldcatch
         elif ':' in a:
             key = ''.join(a[:a.index(':')])
-            if key.startswith('array[(') and key.endswith(')]'):
-                key = ast.literal_eval(key[6:-1])
-            else:
-                call_error('Invalid variable key. Variable keys must be surrounded by parentheses.', 'var')
+            if key in reserved_names:
+                call_error('Invalid variable name. Variable names can not be reserved names.', 'var')
+            if key in functions:
+                call_error('Invalid variable name. A function exists with that name, use DEL to delete functions or variables.', 'var')
+            if not re.match('^[a-zA-Z]+$', key):
+                call_error('Invalid variable name, variable names must fit this REGEX expression: ^[a-zA-Z]+$', 'var')
             value = evaluate(a[a.index(':') + 1:], error=code[i], args=localargs)
-            array[key] = value
+            local_vars[key] = value
+        elif a[0] == 'DEL':
+            if len(a) < 2:
+                call_error('DEL statement missing variable or key to delete.', 'argerr')
+            key = ''.join(a[1:])
+            if key in local_vars:
+                del local_vars[key]
+            elif key in functions:
+                if isinstance(functions[key], BuiltinFunction):
+                    call_error('DEL statement can not delete built-in functions.', 'argerr')
+                del functions[key]
+            elif key in global_vars:
+                call_error('DEL statement can not delete global arguments.', 'argerr')
         elif a[0] == 'IMPORT':
             if len(a) < 2:
                 call_error('IMPORT statement requires at least one argument.', 'argerr')
-            fname = str(evaluate([a[1]], error=code[i], args=localargs))
-            newcode = loader.get_code(fname)
-            if isinstance(newcode, Exception):
-                call_error('There was an error attempting to read from ' + fname + '.', 'ioerr')
-            oldfile = current_file
-            oldcode = current_code
-            oldline = current_line
-            run(newcode, fname, raw=True)
-            current_file = oldfile
-            current_code = oldcode
-            current_line = oldline
-        elif a[0] == 'DEFINE':
-            if len(a) < 3:
-                call_error('DEFINE statement requires two arguments, KEY and VALUE.', 'argerr')
-            key = a[1].strip()
-            if not key:
-                call_error('DEFINE statement key must not be empty.', 'argerr')
-            if key in global_vars or key in local_vars:
-                call_error('Constant with key ' + pformat(key) + ' already exists. Constants can not be redefined.', 'syntax')
-            value = evaluate(a[2:], error=code[i], args=localargs)
-            local_vars[key] = value
+            fname = evaluate([a[1]], error=code[i], args=localargs)
+            withprefix = None
+            if len(a) > 2:
+                withprefix = evaluate([a[2]], error=code[i], args=localargs)
+            if not isinstance(fname, String):
+                call_error('IMPORT statement arguments must be of type String.', 'type')
+            if not isinstance(withprefix, (String, type(None))):
+                call_error('IMPORT statement arguments must be of type String.', 'type')
+            iprefix = fname.value if withprefix is None else withprefix.value if withprefix.value else None
+            for b in global_vars['PATH'].value:
+                c = String(str(b.value) + '/' + str(fname.value))
+                f = c.value
+                if not f.endswith('.mdcl'):
+                    f += '.mdcl'
+                newcode = loader.get_code(f)
+                if isinstance(newcode, Exception):
+                    continue
+                oldfile = current_file
+                oldcode = current_code
+                oldline = current_line
+                old_local_vars = copy(local_vars)
+                old_global_vars = copy(global_vars)
+                old_functions = copy(functions)
+                run(newcode, f, raw=True)
+                current_file = oldfile
+                current_code = oldcode
+                current_line = oldline
+                if iprefix is not None:
+                    new_local_vars = set(local_vars) - set(old_local_vars)
+                    new_global_vars = set(global_vars) - set(old_global_vars)
+                    new_functions = set(functions) - set(old_functions)
+                    local_vars[iprefix] = CompactDict()
+                    global_vars[iprefix] = CompactDict()
+                    functions[iprefix] = CompactDict()
+                    for v in new_local_vars:
+                        local_vars[iprefix][v] = local_vars[v]
+                        del local_vars[v]
+                    for v in new_global_vars:
+                        global_vars[iprefix][v] = global_vars[v]
+                        del global_vars[v]
+                    for v in new_functions:
+                        functions[iprefix][v] = functions[v]
+                        del functions[v]
+                break
+            else:
+                call_error('A script at path ' + pformat(b.value) + ' could not be found or imported from.', 'import')
         elif a[0] == 'SIG':
             a = evaluate_line(a, start=2, error=code[i], args=localargs)
             if len(a) < 2:
@@ -971,7 +1146,32 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                 call_error('Error type to raise must be of type String.', 'type')
             if not isinstance(errortext, String):
                 call_error('Error text must be of type String', 'type')
-            call_error(error_type=MDCLError(errortag.value + '::' + errortext.value))
+            ev = perform_try_catch(MDCLError(errortag.value + '::' + errortext.value), error=code[i], args=localargs)
+            if not isinstance(ev, Null):
+                if yielding:
+                    yielded += [ev]
+                else:
+                    o += str(ev)
+                    if echo:
+                        sys.stdout.write(str(ev))
+        elif a[0] == 'ERRORTAG':
+            a = evaluate_line(a, start=1, error=code[i], args=localargs)
+            if len(a) < 2:
+                call_error('ERRORTAG statement requires at least an error type name.', 'argerr')
+            errortype = a[1]
+            errortag = String('')
+            if len(a) > 2:
+                errortag = a[2]
+            if not isinstance(errortype, String):
+                call_error('Error type to set tag for must be of type String.', 'type')
+            if not isinstance(errortag, String):
+                call_error('Error tag must be of type String.', 'type')
+            if errortype.value in error_tags and errortag.value:
+                call_error('An error tag with that name already exists.', 'type')
+            if errortag.value:
+                error_tags[errortype.value] = errortag.value
+            else:
+                del error_tags[errortype.value]
         elif a[0] == 'YIELD':
             if not yielding:
                 call_error('Yielding is not possible from the current scope.', 'syntax')
@@ -988,6 +1188,19 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
     return o
 
 
+def translate_datatypes(dt, dotuple=True):
+    if isinstance(dt, tuple([a for a in datatypes_switch.keys() if dotuple or a != tuple])):
+        dt = datatypes_switch[type(dt)](dt)
+    if isinstance(dt, (Array, Alphabet)):
+        contents = tuple(translate_datatypes(a) for a in dt.value)
+        dt = type(dt)(contents)
+    if isinstance(dt, builtin_types):
+        return dt
+    if not (isinstance(dt, tuple) and not dotuple):
+        call_error('There was an error during datatype translation for value: ' + pformat(dt) + '.', 'value')
+    return dt
+
+
 def eval_datatypes(exp, error=None, dostrings=False):
     if not exp:
         return exp
@@ -998,11 +1211,19 @@ def eval_datatypes(exp, error=None, dostrings=False):
             a += 1
             continue
         if isinstance(new[a], str):
-            if new[a].startswith('array[(') and new[a].endswith(')]'):
-                try:
-                    new[a] = eval(new[a])
-                except KeyError:
-                    call_error('Variable key does not exist.', 'var', '(' + new[a][9:-3] + ')')
+            if re.match('^[a-zA-Z]+\.[a-zA-Z]+$', new[a]):
+                keys = new[a].split('.')
+                last = None
+                if keys[0] not in set(local_vars + global_vars + functions):
+                    call_error('Namespace ' + pformat(keys[0]) + ' does not exist or has not been imported.', 'namespace')
+                if len(keys) > 2:
+                    call_error('Too many namespace calls in one expression.', 'namespace')
+                if keys[1] in local_vars[keys[0]]:
+                    new[a] = local_vars[keys[0]][keys[1]]
+                elif keys[1] in global_vars[keys[0]]:
+                    new[a] = global_vars[keys[0]][keys[1]]
+                elif keys[1] in functions[keys[0]]:
+                    new[a] = keys[1]
         if isinstance(new[a], tuple([b for b in datatypes_switch.keys() if dostrings or b != str])):
             new[a] = datatypes_switch[type(new[a])](new[a])
         if not isinstance(new[a], str):
@@ -1040,6 +1261,22 @@ def eval_functions(exp, error=None, args=None):
     new = [a for a in exp]
     a = 0
     while a < len(new):
+        if isinstance(new[a], (Function, BuiltinFunction)):
+            limit = len(new[a].args)
+            f = evaluate(new[a + 1:a + 1 + limit], error=error, args=args, funcargs=True)
+            if not isinstance(f, tuple):
+                f = f,
+            oldfile = current_file
+            oldcode = current_code
+            oldline = current_line
+            current_file = current_file + '\n<' + new[a].name + 'METHOD>'
+            current_code = new[a].code
+            current_line = 1
+            new[a] = new[a].call(f, ex_args=args)
+            current_file = oldfile
+            current_code = oldcode
+            current_line = oldline
+            del new[a + 1:a + 1 + limit]
         if isinstance(new[a], builtin_types):
             pass
         elif new[a].startswith('args[') and new[a].endswith(']'):
@@ -1054,8 +1291,8 @@ def eval_functions(exp, error=None, args=None):
                 new[a] = global_args[key]
         elif new[a] in functions:
             limit = len(functions[new[a]].args)
-            f = evaluate(new[a + 1:a + 1 + limit], error=error, args=args)
-            if not isinstance(f, (tuple, list)):
+            f = evaluate(new[a + 1:a + 1 + limit], error=error, args=args, funcargs=True)
+            if not isinstance(f, tuple):
                 f = f,
             oldfile = current_file
             oldcode = current_code
@@ -1083,7 +1320,7 @@ def evaluate_line(oldline, start, end=None, error=None, args=None):
     return oldline
 
 
-def evaluate(exp, error=None, args=None):
+def evaluate(exp, error=None, args=None, funcargs=False):
     if not exp:
         return Null()
     reps = (
@@ -1118,7 +1355,7 @@ def evaluate(exp, error=None, args=None):
                 new[a] = settype(vals[0])
                 del new[a + 1]
                 del new[a - 1]
-                a -= 2
+                a -= 1
             except AttributeError:
                 call_error('Type ' + type(new[a - 1]).__name__ + ' does not have a method for handling ' + new[a], 'attr', error)
         elif new[a] == 'AND':
@@ -1184,6 +1421,8 @@ def evaluate(exp, error=None, args=None):
             if right.value < left.value:
                 step = -1
                 right.value -= 1
+            if a > 0:
+                right.value += 1
             new[a] = Array(tuple(Integer(z) for z in range(left.value, right.value, step)))
             del new[a + 1]
             if a > 0:
@@ -1252,9 +1491,18 @@ def evaluate(exp, error=None, args=None):
             contents = new[a + 1] if a < len(new) - 1 else []
             if contents:
                 contents = evaluate(replacekeys([new[a + 1]], args=args), error=error, args=args)
-            if not isinstance(contents, (tuple, list, String)):
+            if not isinstance(contents, (tuple, list, String, Array, Alphabet)):
                 contents = (contents,)
-            new[a] = Array(contents)
+            new[a] = translate_datatypes(contents)
+            if a < len(new) - 1:
+                del new[a + 1]
+        elif new[a] == 'ALPHABET':
+            contents = new[a + 1] if a < len(new) - 1 else []
+            if contents:
+                contents = evaluate(replacekeys([new[a + 1]], args=args), error=error, args=args)
+            if not isinstance(contents, (tuple, list, String, Array, Alphabet)):
+                pass
+            new[a] = Alphabet(contents)
             if a < len(new) - 1:
                 del new[a + 1]
         elif new[a] in local_vars:
@@ -1265,6 +1513,7 @@ def evaluate(exp, error=None, args=None):
             token = new[a]
             if len(token) > 100:
                 token = token[:97] + '...'
+            print(new)
             call_error('Undefined Token: ' + pformat(token), 'syntax', error)
         a += 1
     code = ','.join([(type(a).__name__ + '(' + pformat(a) + ')') if isinstance(a, builtin_types) else a for a in new if a is not None])
@@ -1272,6 +1521,9 @@ def evaluate(exp, error=None, args=None):
     if code and code != ',':
         try:
             out = eval(code)
+            out = translate_datatypes(out, dotuple=not funcargs)
+            if funcargs and not isinstance(out, tuple):
+                out = out,
             return out
         except Exception as e:
             print(exp)
@@ -1285,15 +1537,6 @@ def replacekeys(line, args=None):
     for a in range(len(line)):
         if isinstance(line[a], builtin_types):
             pass
-        elif line[a].startswith('(') and line[a].endswith(')'):
-            values = []
-            for b in line[a][1:-1].split(','):
-                hx = b.strip().upper()
-                if not all([c in loader.digits + 'ABCDEF' for c in hx]):
-                    call_error('Invalid variable key. Variable keys must be in Hexadecimal form, including commas and: "0123456789ABCDEF".',
-                        'var', line)
-                values += ['0x' + hx]
-            line[a] = 'array[(' + ','.join(values) + ',)]'
         elif line[a].startswith('$'):
             b = line[a][1]
             c = ''
@@ -1374,19 +1617,22 @@ def rindex(s, i):
 class BFList:
 
     @staticmethod
-    def read(*args):
+    def read(args):
+        args = args.value
         return String(get_input(*args)
             if [a for a in args if type(a) is not Null]
             else get_input())
 
     @staticmethod
-    def get_length(*args):
+    def get_length(args):
+        args = args.value
         if isinstance(args[0], builtin_types):
             return Integer(len(args[0].value))
         return Integer(len(args[0]))
 
     @staticmethod
-    def readfile(*args):
+    def readfile(args):
+        args = args.value
         if not isinstance(args[0], String):
             call_error('READFILE first argument must be of type String.', 'argerr')
         try:
@@ -1402,17 +1648,24 @@ class BFList:
             call_error('READFILE failed to read from the file at path: "' + str(args[0]) + '"', 'ioerr')
 
     @staticmethod
-    def get_type(*args):
+    def writefile(args):
+        args = args.value
+        pass
+
+    @staticmethod
+    def get_type(args):
+        args = args.value
         if not args:
             args = [Null()]
         return String(type(args[0]).__name__)
 
     @staticmethod
     def echo(args):
+        args = args.value
         content = String('') if isinstance(args[0], Null) else args[0]
         sep = args[1] if isinstance(args[1], String) else String(' ')
         end = args[2] if isinstance(args[2], String) else String('\n')
-        if isinstance(args[0], Array):
+        if isinstance(args[0], (Array, Alphabet)):
             content = String(sep.value.join([str(a) for a in content.value]))
         elif isinstance(args[0], str):
             content = String(content)
@@ -1432,6 +1685,92 @@ current_line = 1
 current_catch = {}
 global_args = [String(a) for a in sys.argv[1:]]
 
+reserved_names = (
+    'FILE',
+    'LINE',
+    '_',
+    ',',
+    'ERR',
+    'PATH',
+
+    'NEW',
+    'IF',
+    'WHILE',
+    'FOR',
+    'TRY',
+    'CATCH',
+    ':',
+    'DEL',
+    'IMPORT',
+    'DEFINE', # Remake define statement.
+    'SIG',
+    'RAISE',
+    'ERRORTAG',
+    'YIELD',
+
+    'ADD',
+    'SUB',
+    'MULT',
+    'DIV',
+    'PWR',
+    'MOD',
+    'EQ',
+    'LT',
+    'GT',
+    'LE',
+    'GE',
+    'INDEX',
+    'HAS',
+
+    'AND',
+    'OR',
+    'ONLY',
+    'TO',
+    'SKIP',
+    'ARRAY',
+    'ALPHABET',
+
+    'INTEGER',
+    'FLOAT',
+    'STRING',
+    'REGEX',
+    'BOOLEAN',
+    'NULL',
+
+    'READ',
+    'LEN',
+    'READFILE',
+    'WRITEFILE',
+    'TYPE',
+    'ECHO',
+
+    'NOT',
+
+    'EXIT',
+)
+
+start_error_tags = error_tags = CompactDict({
+    'eval': 'ERROR attempting to run eval statement',
+    'exp': 'ERROR attempting to evaluate expression',
+    'ioerr': 'IOERROR',
+    'argerr': 'ARGUMENT ERROR',
+    'assert': 'ASSERTION ERROR',
+    'var': 'VAR ERROR',
+    'syntax': 'SYNTAX ERROR',
+    'attr': 'ATTRIBUTE ERROR',
+    'recursion': 'RECURSION ERROR',
+    'type': 'TYPE ERROR',
+    'value': 'VALUE ERROR',
+    'keyboardinterrupt': 'KEYBOARD INTERRUPT',
+    'unknownvalue': 'UNKNOWN VALUE',
+    'filenotfound': 'FILE NOT FOUND ERROR',
+    'dirnotfound': 'DIRECTORY NOT FOUND ERROR',
+    'outofrange': 'OUT OF RANGE ERROR',
+    'import': 'IMPORT ERROR',
+    'namespace': 'NAMESPACE ERROR',
+    'fatal': 'FATAL ERROR',
+})
+
 datatypes_switch = {
     str: String,
     int: Integer,
@@ -1439,15 +1778,16 @@ datatypes_switch = {
     bool: Boolean,
     tuple: Array,
     list: Array,
+    set: Alphabet,
     type(None): Null,
 }
-builtin_types = tuple(datatypes_switch.values()) + (
+builtin_types = tuple(set(datatypes_switch.values())) + (
     RegexString,
 )
 
 global_vars = CompactDict()
 local_vars = CompactDict()
-array = CompactDict()
+
 functions = {
     'INTEGER': BuiltinFunction('INTEGER',
         [['@', '*']],
@@ -1477,6 +1817,9 @@ functions = {
     'READFILE': BuiltinFunction('READFILE',
         [[String]],
         BFList.readfile),
+    'WRITEFILE': BuiltinFunction('WRITEFILE',
+        [[String], [String]],
+        BFList.writefile),
     'TYPE': BuiltinFunction('TYPE',
         [['@']],
         BFList.get_type),

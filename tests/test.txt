@@ -1,4 +1,0 @@
-'This is a string'
-'.'
-[0]
-[1]

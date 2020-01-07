@@ -44,7 +44,7 @@ if not os.path.isfile(fname):
 
 fname = os.path.abspath(fname)
 dirname = os.path.dirname(fname)
-initialise_path(dirname)
+initialise_path(sys.path[0], dirname)
 code = get_code(fname)
 if isinstance(code, Exception):
     call_error("The path: '" + str(fname) + "' could not be accessed, "
@@ -57,6 +57,6 @@ except MDCLError as e:
 except (KeyboardInterrupt, EOFError):
     sig_c.send('SIGINT')
 except RecursionError:
-    call_error('RecursionError, too many calls back and forth.', 'recursion')
+    call_error('Too many recursive calls in a row.', 'recursion')
 except Exception as e:
     call_error(error_type='fatal')

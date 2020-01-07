@@ -1,0 +1,50 @@
+NEW SPLIT
+: String
+: * String
+: {
+    FA : ARRAY;
+    FC : '';
+
+    FOR i : ARRAY $0 : {
+        IF $1 < $1 > " \n\t\v\r" HAS i : {
+            FA : FA ADD FC;
+            FC : '';
+        }:ELSE:{
+            FC : FC ADD i;
+        };
+    };
+
+    YIELD FA ADD FC;
+};
+
+NEW JOIN
+: Array
+: * String
+: {
+    FC : '';
+    FOR i : $0 : {
+        FC : FC ADD i;
+        IF $1 : {
+            FC : FC ADD $1;
+        };
+    };
+    IF $1 : {
+        FC : FC SUB [ LEN $1 ];
+    };
+    YIELD FC;
+};
+
+NEW SPLICE
+: String Array
+: Integer
+: Integer
+: {
+    YIELD `${0}.value[${1}.value:${2}.value]`;
+};
+
+NEW FIND
+: String
+: String
+: {
+    YIELD `${0}.value.index(${1}.value)` < $0 HAS $1 > NULL;
+};
