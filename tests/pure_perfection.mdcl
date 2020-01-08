@@ -1,0 +1,17 @@
+IMPORT 'arraycomp' 'ac';
+IMPORT 'math';
+
+diff : 4.66666667;
+ndif : 17.7142857;
+nndi : 16.3870968;
+
+perfect : ARRAY;
+
+FOR i : 2 TO 500 : {
+    e : math.FactorsOf i;
+    s : math.Sum e SUB i;
+    IF i EQ s : {
+        perfect : perfect ADD i;
+        ECHO i;
+    };
+};

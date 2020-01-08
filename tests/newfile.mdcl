@@ -2,6 +2,3 @@ IMPORT 'arraycomp';
 
 contents : 'hey there this is a string';
 contents : arraycomp.SPLIT contents;
-
-'THERE IS AN ERROR HERE: '; ECHO -9.5;
-'-9.5 should evaluate to -9.5, not 9.5.';

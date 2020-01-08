@@ -5,6 +5,7 @@ First Commit was at: 1/1/2020.
 
 '''
 
+import re
 import sys
 import string
 
@@ -44,7 +45,11 @@ def count_lines(fname):
 
 
 def isnum(num):
-    return all([b in digits for b in num])
+    return re.match('^(-|\+)*[0-9]+$', num)
+
+
+def isfloat(num):
+    return re.match('^(-|\+)*[0-9]*\.[0-9]+$', num)
 
 
 def isword(word):
@@ -75,6 +80,8 @@ def tokenise(line):
             p = 'W'
         if (q != p and p != 'W' or p == 'S') and not (
             t == '.' and p in 'AD'
+        ) and not(
+            t in ('-', '+') and p in 'D'
         ) and not (
             sq or dq or bt or rb or sb > 0 or cb > 0 or lg > 0
         ):
@@ -121,12 +128,6 @@ def tokenise(line):
             if pair[0] == '$' and isnum(pair[1]):
                 del k[-1]
                 k.append('$' + pair[1])
-            elif pair[0] == '-' and isnum(pair[1]):
-                del k[-1]
-                k.append('-' + pair[1])
-            elif pair[0] == '+' and isnum(pair[1]):
-                del k[-1]
-                k.append('+' + pair[1])
             elif pair[0] == 'RE' and (pair[1].startswith('"') or pair[1].startswith("'")):
                 del k[-1]
                 k.append('RE' + pair[1])

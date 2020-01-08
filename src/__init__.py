@@ -58,5 +58,7 @@ except (KeyboardInterrupt, EOFError):
     sig_c.send('SIGINT')
 except RecursionError:
     call_error('Too many recursive calls in a row.', 'recursion')
+except ZeroDivisionError:
+    call_error('Attemped division or modulo by zero.', 'zerodivision')
 except Exception as e:
     call_error(error_type='fatal')

@@ -14,6 +14,8 @@ import re
 import signal
 import sys
 import string
+import threading
+import time
 import traceback as tb
 
 from copy import copy
@@ -183,8 +185,11 @@ class Integer(Datatype):
         return bool(self.value)
 
     def ADD(self, other):
-        mdc_assert(self, other, (Integer, Float), 'ADD')
-        return self.value + other.value, type(other)
+        mdc_assert(self, other, (Integer, Float, String), 'ADD')
+        if isinstance(other, (Integer, Float)):
+            return self.value + other.value, type(other)
+        if isinstance(other, String):
+            return str(self.value) + other.value, String
 
     def SUB(self, other):
         mdc_assert(self, other, (Integer, Float), 'SUB')
@@ -201,7 +206,6 @@ class Integer(Datatype):
 
     def DIV(self, other):
         mdc_assert(self, other, (Integer, Float, Boolean), 'DIV')
-        print(other.value, type(other), other)
         if isinstance(other, (Integer, Float)):
             return self.value / other.value, type(other)
         if isinstance(other, Boolean):
@@ -743,6 +747,7 @@ def initialise_global_vars(file=None):
     global_vars['LINE'] = Integer(1)
     global_vars['_'] = Null()
     global_vars[','] = Null()
+    global_vars['='] = Null()
     global_vars['ERR'] = Null()
 
 
@@ -955,21 +960,20 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                 call_error('FOR loop variable name can not be empty.', 'syntax')
             if variable in global_vars and variable != ',':
                 call_error('Name ' + pformat(variable) + ' is already defined in the global variables list.', 'var')
-            if variable in local_vars:
-                call_error('Name ' + pformat(variable) + ' is already defined in the local variables list.', 'var')
-            if not iterable:
+            if isinstance(iterable, Null):
                 call_error('FOR loop iterable can not be NULL.', 'syntax')
             if not runcode:
                 call_error('FOR loop code to run can not be empty.', 'syntax')
             if not isinstance(iterable, (Integer, String, Array)):
                 call_error('FOR loop can only iterate over an Array, Integer, or String.', 'type')
             if isinstance(iterable, Integer):
-                iterable = range(iterable.value)
+                iterable = list(range(iterable.value))
             elif isinstance(iterable, String):
-                iterable = Array(iterable).value
-            else:
-                iterable = iterable.value
-            for value in iterable:
+                iterable = Array(iterable)
+            oldvariable = None
+            if variable in local_vars:
+                oldvariable = local_vars[variable]
+            for value in translate_datatypes(iterable).value:
                 local_vars[variable] = value
                 global_vars[','] = value
                 ev = evaluate(runcode, error=code[i], args=localargs)
@@ -980,7 +984,8 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                         o += str(ev)
                         if echo:
                             sys.stdout.write(str(ev))
-                del local_vars[variable]
+            if oldvariable is not None:
+                local_vars[variable] = oldvariable
         elif a[0] == 'TRY':
             if len(a) < 3 or ':' not in a:
                 call_error('TRY statement requires at least the ":" separator and code to run.', 'syntax')
@@ -1047,6 +1052,15 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                         o += str(ev)
                         if echo:
                             sys.stdout.write(str(ev))
+            except ZeroDivisionError:
+                ev = perform_try_catch(MDCLError('zerodivision::Attemped division or modulo by zero.'), error=code[i], args=localargs)
+                if not isinstance(ev, Null):
+                    if yielding:
+                        yielded += [ev]
+                    else:
+                        o += str(ev)
+                        if echo:
+                            sys.stdout.write(str(ev))
             except Exception as e:
                 call_error(error_type='fatal')
             current_catch = oldcatch
@@ -1059,6 +1073,7 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
             if not re.match('^[a-zA-Z]+$', key):
                 call_error('Invalid variable name, variable names must fit this REGEX expression: ^[a-zA-Z]+$', 'var')
             value = evaluate(a[a.index(':') + 1:], error=code[i], args=localargs)
+            global_vars['+'] = value
             local_vars[key] = value
         elif a[0] == 'DEL':
             if len(a) < 2:
@@ -1233,16 +1248,16 @@ def eval_datatypes(exp, error=None, dostrings=False):
                 new[a] = RegexString(ast.literal_eval(new[a][2:]))
             except Exception:
                 call_error('Invalid Regex String.', 'syntax', error)
-        elif re.match("^'.*'", new[a]): # Is new[a] a string with single quotes? If so, assign String() class using RAW value.
+        elif re.match("^'.*'$", new[a]): # Is new[a] a string with single quotes? If so, assign String() class using RAW value.
             new[a] = String(new[a][1:-1])
-        elif re.match('^".*"', new[a]): # Is new[a] a string with double quotes? If so, assign evaluated String() class.
+        elif re.match('^".*"$', new[a]): # Is new[a] a string with double quotes? If so, assign evaluated String() class.
             try:
                 new[a] = String(ast.literal_eval(new[a]))
             except Exception:
                 call_error('Invalid String.', 'syntax', error)
-        elif re.match('^(-|\+)*[0-9]*\.[0-9]+', new[a]): # Is new[a] a float? If so, assign Float() class.
+        elif re.match('^(-|\+)*[0-9]*\.[0-9]+$', new[a]): # Is new[a] a float? If so, assign Float() class.
             new[a] = Float(new[a])
-        elif re.match('^(-|\+)*[0-9]+', new[a]): # Is new[a] an integer? If so, assign Integer() class.
+        elif re.match('^(-|\+)*[0-9]+$', new[a]): # Is new[a] an integer? If so, assign Integer() class.
             new[a] = Integer(new[a])
         elif new[a] in ('TRUE', 'FALSE', 'True', 'False'): # Is new[a] a boolean? If so, assign Boolean() class.
             new[a] = Boolean(new[a])
@@ -1313,8 +1328,8 @@ def evaluate_line(oldline, start, end=None, error=None, args=None):
     if end is None:
         end = len(oldline)
     new_line = evaluate(replacekeys(oldline[start:end], args=args), error=error, args=args)
-    if isinstance(new_line, (tuple, list)):
-        oldline[start:end] = new_line
+    if isinstance(new_line, Array):
+        oldline[start:end] = new_line.value
     else:
         oldline[start] = new_line
     return oldline
@@ -1509,11 +1524,12 @@ def evaluate(exp, error=None, args=None, funcargs=False):
             new[a] = local_vars[new[a]]
         elif new[a] in global_vars:
             new[a] = global_vars[new[a]]
+        elif new[a] in reserved_names:
+            call_error('Invalid syntactical usage of reserved name.', 'syntax')
         elif new[a] not in functions:
             token = new[a]
             if len(token) > 100:
                 token = token[:97] + '...'
-            print(new)
             call_error('Undefined Token: ' + pformat(token), 'syntax', error)
         a += 1
     code = ','.join([(type(a).__name__ + '(' + pformat(a) + ')') if isinstance(a, builtin_types) else a for a in new if a is not None])
@@ -1672,6 +1688,12 @@ class BFList:
         print(content.value, end=end.value)
         return String('')
 
+    @staticmethod
+    def wait(args):
+        args = args.value
+        time.sleep(args[0].value)
+        return String('')
+
 
 #
 # VARIABLES
@@ -1690,6 +1712,7 @@ reserved_names = (
     'LINE',
     '_',
     ',',
+    '+',
     'ERR',
     'PATH',
 
@@ -1768,6 +1791,7 @@ start_error_tags = error_tags = CompactDict({
     'outofrange': 'OUT OF RANGE ERROR',
     'import': 'IMPORT ERROR',
     'namespace': 'NAMESPACE ERROR',
+    'zerodivision': 'ZERO DIVISION ERROR',
     'fatal': 'FATAL ERROR',
 })
 
@@ -1824,8 +1848,11 @@ functions = {
         [['@']],
         BFList.get_type),
     'ECHO': BuiltinFunction('ECHO',
-        [['@'], ['*', 'String'], ['*', 'String']],
+        [['@'], ['*', String], ['*', String]],
         BFList.echo),
+    'WAIT': BuiltinFunction('WAIT',
+        [[Integer, Float]],
+        BFList.wait),
 
     'NOT': BuiltinFunction('NOT',
         [['@']],
