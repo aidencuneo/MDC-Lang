@@ -1,4 +1,6 @@
-IMPORT 'arraycomp';
+IMPORT 'arraycomp' '';
+IMPORT 'random' '';
 
-contents : 'hey there this is a string';
-contents : arraycomp.SPLIT contents;
+FOR , : TO 50 : {
+    ECHO RANGE 0 10;
+};
