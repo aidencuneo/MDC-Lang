@@ -1,4 +1,12 @@
 IMPORT 'arraycomp' '';
 IMPORT 'random' '';
 
-FOR 50 : RANGE 0 10 ADD "\n";
+ECHO '-----------------------------------------------------------';
+ECHO "PYTHON  >>>  [print(randint(0,9),end='')for a in range(50)]";
+ECHO 'MDCL    >>>  FOR50:RANGE9';
+ECHO '-----------------------------------------------------------';
+ECHO 'The above snippets perform the same action with a clear';
+ECHO 'difference in code size.';
+ECHO '-----------------------------------------------------------';
+
+FOR50:RANGE9;
