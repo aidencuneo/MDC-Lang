@@ -1,6 +1,4 @@
 IMPORT 'arraycomp' '';
 IMPORT 'random' '';
 
-FOR , : TO 50 : {
-    ECHO RANGE 0 10;
-};
+FOR 50 : RANGE 0 10 ADD "\n";

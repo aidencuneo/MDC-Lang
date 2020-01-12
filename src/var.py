@@ -5,7 +5,7 @@ First Commit was at: 1/1/2020.
 
 '''
 
-__version__ = '1.3.6'
+__version__ = '1.3.6.1'
 
 import ast
 import os
@@ -951,15 +951,20 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
             if len(a) < 3 or ':' not in a:
                 call_error('FOR loop requires at least a variable name, iterable, the ":" separator, and code to run.', 'syntax')
             contents = tuple(filter(None, split_list(a[1:], ':')))
+            if not contents[1:]:
+                call_error('FOR loop requires at least an iterable, the ":" separator, and code to run.', 'syntax')
             if not contents[2:]:
-                call_error('FOR loop requires at least a variable name, iterable, the ":" separator, and code to run.', 'syntax')
-            variable = contents[0][0]
-            iterable = evaluate(contents[1], error=code[i], args=localargs)
-            runcode = contents[2]
-            if not variable:
-                call_error('FOR loop variable name can not be empty.', 'syntax')
+                variable = None
+                iterable = evaluate(contents[0], error=code[i], args=localargs)
+                runcode = contents[1]
+            else:
+                variable = contents[0][0]
+                iterable = evaluate(contents[1], error=code[i], args=localargs)
+                runcode = contents[2]
             if variable in global_vars and variable != ',':
                 call_error('Name ' + pformat(variable) + ' is already defined in the global variables list.', 'var')
+            if variable in reserved_names and variable != ',':
+                call_error('Invalid FOR loop variable name. FOR loop variable names can not be reserved names', 'var')
             if isinstance(iterable, Null):
                 call_error('FOR loop iterable can not be NULL.', 'syntax')
             if not runcode:
@@ -974,7 +979,8 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
             if variable in local_vars:
                 oldvariable = local_vars[variable]
             for value in translate_datatypes(iterable).value:
-                local_vars[variable] = value
+                if variable is not None:
+                    local_vars[variable] = value
                 global_vars[','] = value
                 ev = evaluate(runcode, error=code[i], args=localargs)
                 if not isinstance(ev, Null):
