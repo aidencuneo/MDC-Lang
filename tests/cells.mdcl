@@ -1,0 +1,34 @@
+IMPORT 'arraycomp';
+IMPORT 'math';
+IMPORT 'random';
+
+NEW makeCells
+: Integer
+: Integer
+: {
+    output : ARRAY;
+    FOR a : $1 : {
+        inside : ARRAY;
+        FOR b : $0 : {
+            inside : inside ADD [ RANGE 1 ];
+        };
+        output : output PUT inside;
+    };
+    YIELD output;
+};
+
+NEW display
+: Array
+: {
+    output : '';
+    FOR $0 : {
+        output : output ADD
+
+        ;
+    };
+};
+
+height : 10;
+width  : 10;
+cells  : makeCells width height;
+cells;

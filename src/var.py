@@ -5,7 +5,7 @@ First Commit was at: 1/1/2020.
 
 '''
 
-__version__ = '1.3.6.1'
+__version__ = '1.3.6.2'
 
 import ast
 import os
@@ -26,7 +26,6 @@ import loader
 
 from compact import CompactList, CompactDict
 
-input_func = 'raw_input' if sys.version_info[0] < 3 else 'input'
 get_input = raw_input if sys.version_info[0] < 3 else input
 
 
@@ -1097,14 +1096,8 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
             if len(a) < 2:
                 call_error('IMPORT statement requires at least one argument.', 'argerr')
             fname = evaluate([a[1]], error=code[i], args=localargs)
-            withprefix = None
-            if len(a) > 2:
-                withprefix = evaluate([a[2]], error=code[i], args=localargs)
             if not isinstance(fname, String):
                 call_error('IMPORT statement arguments must be of type String.', 'type')
-            if not isinstance(withprefix, (String, type(None))):
-                call_error('IMPORT statement arguments must be of type String.', 'type')
-            iprefix = fname.value if withprefix is None else withprefix.value if withprefix.value else None
             for b in global_vars['PATH'].value:
                 c = String(str(b.value) + '/' + str(fname.value))
                 f = c.value
@@ -1116,29 +1109,10 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                 oldfile = current_file
                 oldcode = current_code
                 oldline = current_line
-                old_local_vars = copy(local_vars)
-                old_global_vars = copy(global_vars)
-                old_functions = copy(functions)
                 run(newcode, f, raw=True)
                 current_file = oldfile
                 current_code = oldcode
                 current_line = oldline
-                if iprefix is not None:
-                    new_local_vars = set(local_vars) - set(old_local_vars)
-                    new_global_vars = set(global_vars) - set(old_global_vars)
-                    new_functions = set(functions) - set(old_functions)
-                    local_vars[iprefix] = CompactDict()
-                    global_vars[iprefix] = CompactDict()
-                    functions[iprefix] = CompactDict()
-                    for v in new_local_vars:
-                        local_vars[iprefix][v] = local_vars[v]
-                        del local_vars[v]
-                    for v in new_global_vars:
-                        global_vars[iprefix][v] = global_vars[v]
-                        del global_vars[v]
-                    for v in new_functions:
-                        functions[iprefix][v] = functions[v]
-                        del functions[v]
                 break
             else:
                 call_error('A script at path ' + pformat(b.value) + ' could not be found or imported from.', 'import')
@@ -1189,6 +1163,8 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                 call_error('Error tag must be of type String.', 'type')
             if errortype.value in error_tags and errortag.value:
                 call_error('An error tag with that name already exists.', 'type')
+            if errortype.value in start_error_tags:
+                call_error('Built-in errortags are readonly.', 'readonly')
             if errortag.value:
                 error_tags[errortype.value] = errortag.value
             else:
@@ -1529,7 +1505,10 @@ def evaluate(exp, error=None, args=None, funcargs=False):
         elif new[a] in local_vars:
             new[a] = local_vars[new[a]]
         elif new[a] in global_vars:
-            new[a] = global_vars[new[a]]
+            if new[a] == '_':
+                del new[a]
+            else:
+                new[a] = global_vars[new[a]]
         elif new[a] in reserved_names:
             call_error('Invalid syntactical usage of reserved name.', 'syntax')
         elif new[a] not in functions:
@@ -1798,6 +1777,7 @@ start_error_tags = error_tags = CompactDict({
     'import': 'IMPORT ERROR',
     'namespace': 'NAMESPACE ERROR',
     'zerodivision': 'ZERO DIVISION ERROR',
+    'readonly': 'READONLY VALUE',
     'fatal': 'FATAL ERROR',
 })
 
