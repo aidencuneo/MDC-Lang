@@ -36,7 +36,7 @@ if options:
     if '-r' in options:
         del options[options.index('-r')]
         code = ' '.join(fname)
-        initialise_path(sys.path[0], os.getcwd())
+        initialise_path(os.path.dirname(sys.path[0]), os.getcwd())
         start(code)
         sys.exit()
 if options:
