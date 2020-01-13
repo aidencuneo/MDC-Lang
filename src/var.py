@@ -5,7 +5,7 @@ First Commit was at: 1/1/2020.
 
 '''
 
-__version__ = '1.3.6.2'
+__version__ = '1.3.7'
 
 import ast
 import os
@@ -78,7 +78,7 @@ class Function:
         for a in range(len(self.args)):
             if a >= len(args):
                 args += (Null(),)
-            elif type(args[a]).__name__ not in self.args[a] and '@' not in self.args[a]:
+            elif type(args[a]).__name__ not in self.args[a] and '@' not in self.args[a] and not isinstance(args[a], Null):
                 types = '(' + ', '.join([b for b in self.args[a] if b != '*']) + ')'
                 call_error('Argument ' + str(a + 1) + ' of function ' + self.name + ' must fit into: '
                     + types + '. "' + type(args[a]).__name__ + '" is invalid.', 'assert')
@@ -98,14 +98,10 @@ class Function:
 class BuiltinFunction(Function):
 
     def call(self, args, ex_args=None):
-        if args[0] is None:
-            raise None
         if isinstance(args, Array):
             args = args.value
         args = self.check_args(args)
-        funcargs = evaluate(args[:len(self.args)], args=ex_args)
-        if not isinstance(funcargs, Array):
-            funcargs = Array((funcargs,))
+        funcargs = evaluate(args[:len(self.args)], args=ex_args, funcargs=True)
         r = self.code(funcargs)
         global_vars['_'] = r
         return r
@@ -486,7 +482,12 @@ class RegexString(Datatype):
 class Boolean(Datatype):
 
     def __init__(self, value):
+        if isinstance(value, tuple):
+            if len(value) == 1:
+                value = value[0]
         mdc_assert(self, value, (int, str, bool) + builtin_types, 'BOOLEAN', showname=False)
+        if isinstance(value, Array):
+            raise e
         if isinstance(value, str):
             value = value.lower()
             if value == 'true':
@@ -542,10 +543,7 @@ class Array(Datatype):
 
     def ADD(self, other):
         mdc_assert(self, other, builtin_types, 'ADD')
-        if isinstance(other, Array):
-            return self.value + other.value, Array
-        else:
-            return self.value + (other,), Array
+        return self.value + (other,), Array
 
     def SUB(self, other):
         mdc_assert(self, other, (Integer, String), 'SUB')
@@ -559,6 +557,10 @@ class Array(Datatype):
                     break
             self.value = tuple(self.value)
             return self.value, Array
+
+    def MULT(self, other):
+        mdc_assert(self, other, (Array, Alphabet), 'MULT')
+        return self.value + other.value, Array
 
     def INDEX(self, other):
         mdc_assert(self, other, Integer, 'INDEX')
@@ -746,7 +748,6 @@ def initialise_global_vars(file=None):
     global_vars['LINE'] = Integer(1)
     global_vars['_'] = Null()
     global_vars[','] = Null()
-    global_vars['='] = Null()
     global_vars['ERR'] = Null()
 
 
@@ -828,6 +829,21 @@ def eval_statement(code, args, error):
         if isinstance(e, SystemExit):
             print('\nThe following error occurred as a result of the above error:')
         call_error(str(e), 'eval', error)
+
+
+def start(rawcode, filename=None):
+    try:
+        run(rawcode, filename, raw=True)
+    except MDCLError as e:
+        call_error(error_type=e)
+    except (KeyboardInterrupt, EOFError):
+        sig_c.send('SIGINT')
+    except RecursionError:
+        call_error('Too many recursive calls in a row.', 'recursion')
+    except ZeroDivisionError:
+        call_error('Attemped division or modulo by zero.', 'zerodivision')
+    except Exception as e:
+        call_error(error_type='fatal')
 
 
 def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=False, yielding=False, localargs=None):
@@ -1075,11 +1091,11 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                 call_error('Invalid variable name. Variable names can not be reserved names.', 'var')
             if key in functions:
                 call_error('Invalid variable name. A function exists with that name, use DEL to delete functions or variables.', 'var')
-            if not re.match('^[a-zA-Z]+$', key):
+            if not re.match('^[a-zA-Z]+$', key) and key:
                 call_error('Invalid variable name, variable names must fit this REGEX expression: ^[a-zA-Z]+$', 'var')
             value = evaluate(a[a.index(':') + 1:], error=code[i], args=localargs)
-            global_vars['+'] = value
-            local_vars[key] = value
+            if key:
+                local_vars[key] = value
         elif a[0] == 'DEL':
             if len(a) < 2:
                 call_error('DEL statement missing variable or key to delete.', 'argerr')
@@ -1095,27 +1111,28 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
         elif a[0] == 'IMPORT':
             if len(a) < 2:
                 call_error('IMPORT statement requires at least one argument.', 'argerr')
-            fname = evaluate([a[1]], error=code[i], args=localargs)
-            if not isinstance(fname, String):
+            fnames = evaluate(a[1:], error=code[i], args=localargs, funcargs=True)
+            if any(not isinstance(f, String) for f in fnames):
                 call_error('IMPORT statement arguments must be of type String.', 'type')
-            for b in global_vars['PATH'].value:
-                c = String(str(b.value) + '/' + str(fname.value))
-                f = c.value
-                if not f.endswith('.mdcl'):
-                    f += '.mdcl'
-                newcode = loader.get_code(f)
-                if isinstance(newcode, Exception):
-                    continue
-                oldfile = current_file
-                oldcode = current_code
-                oldline = current_line
-                run(newcode, f, raw=True)
-                current_file = oldfile
-                current_code = oldcode
-                current_line = oldline
-                break
-            else:
-                call_error('A script at path ' + pformat(b.value) + ' could not be found or imported from.', 'import')
+            for fname in fnames:
+                for b in global_vars['PATH'].value:
+                    c = String(str(b.value) + '/' + str(fname.value))
+                    f = c.value
+                    if not f.endswith('.mdcl'):
+                        f += '.mdcl'
+                    newcode = loader.get_code(f)
+                    if isinstance(newcode, Exception):
+                        continue
+                    oldfile = current_file
+                    oldcode = current_code
+                    oldline = current_line
+                    run(newcode, f, raw=True)
+                    current_file = oldfile
+                    current_code = oldcode
+                    current_line = oldline
+                    break
+                else:
+                    call_error('A script at path ' + pformat(b.value) + ' could not be found or imported from.', 'import')
         elif a[0] == 'SIG':
             a = evaluate_line(a, start=2, error=code[i], args=localargs)
             if len(a) < 2:
@@ -1175,7 +1192,7 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
             yielded += [evaluate(a[1:], error=code[i], args=localargs)]
         else:
             a = evaluate(a, error=code[i], args=localargs)
-            if isinstance(a, builtin_types):
+            if isinstance(a, builtin_types) and not isinstance(a, Null):
                 o += str(a)
                 if echo:
                     sys.stdout.write(str(a))
@@ -1269,7 +1286,7 @@ def eval_functions(exp, error=None, args=None):
             current_file = current_file + '\n<' + new[a].name + 'METHOD>'
             current_code = new[a].code
             current_line = 1
-            new[a] = new[a].call(f, ex_args=args)
+            new[a] = new[a].call(f)
             current_file = oldfile
             current_code = oldcode
             current_line = oldline
@@ -1297,12 +1314,18 @@ def eval_functions(exp, error=None, args=None):
             current_file = current_file + '\n<' + new[a] + 'METHOD>'
             current_code = functions[new[a]].code
             current_line = 1
-            new[a] = functions[new[a]].call(f, ex_args=args)
+            new[a] = functions[new[a]].call(f)
             current_file = oldfile
             current_code = oldcode
             current_line = oldline
+            if isinstance(new[a], tuple):
+                print('STOP1', new[a], f)
+                raise e
             del new[a + 1:a + 1 + limit]
         a += 1
+    if tuple in [type(a) for a in new]:
+        print('STOP', exp, new)
+        raise e
     return new
 
 
@@ -1320,7 +1343,7 @@ def evaluate_line(oldline, start, end=None, error=None, args=None):
 def evaluate(exp, error=None, args=None, funcargs=False):
     if not exp:
         return Null()
-    reps = (
+    kwds = (
         'ADD',
         'SUB',
         'MULT',
@@ -1335,13 +1358,26 @@ def evaluate(exp, error=None, args=None, funcargs=False):
         'INDEX',
         'HAS',
     )
+    reps = {
+        '+': 'ADD',
+        '-': 'SUB',
+        '*': 'MULT',
+        '/': 'DIV',
+        '^': 'PWR',
+        '%': 'MOD',
+        '=': 'EQ',
+        '|': 'HAS',
+    }
     new = [a for a in exp]
     new = eval_functions(eval_datatypes(new, error=error), error=error, args=args)
     a = 0
     while a < len(new):
         if isinstance(new[a], builtin_types + (type(None),)):
-            pass
-        elif new[a] in reps:
+            a += 1
+            continue
+        if new[a] in reps:
+            new[a] = reps[new[a]]
+        if new[a] in kwds:
             if a - 1 < 0:
                 call_error('Missing first argument for ' + new[a] + ' method.', 'syntax', error)
             if a + 1 >= len(new):
@@ -1619,21 +1655,18 @@ class BFList:
 
     @staticmethod
     def read(args):
-        args = args.value
         return String(get_input(*args)
             if [a for a in args if type(a) is not Null]
             else get_input())
 
     @staticmethod
     def get_length(args):
-        args = args.value
         if isinstance(args[0], builtin_types):
             return Integer(len(args[0].value))
         return Integer(len(args[0]))
 
     @staticmethod
     def readfile(args):
-        args = args.value
         if not isinstance(args[0], String):
             call_error('READFILE first argument must be of type String.', 'argerr')
         try:
@@ -1650,19 +1683,16 @@ class BFList:
 
     @staticmethod
     def writefile(args):
-        args = args.value
         pass
 
     @staticmethod
     def get_type(args):
-        args = args.value
         if not args:
             args = [Null()]
         return String(type(args[0]).__name__)
 
     @staticmethod
     def echo(args):
-        args = args.value
         content = String('') if isinstance(args[0], Null) else args[0]
         sep = args[1] if isinstance(args[1], String) else String(' ')
         end = args[2] if isinstance(args[2], String) else String('\n')
@@ -1675,9 +1705,23 @@ class BFList:
 
     @staticmethod
     def wait(args):
-        args = args.value
         time.sleep(args[0].value)
         return String('')
+
+    @staticmethod
+    def get_globals(args):
+        return Array(global_vars.keys()._value)
+
+    @staticmethod
+    def get_locals(args):
+        return Array(local_vars.keys()._value)
+
+    @staticmethod
+    def get_argv(args):
+        if isinstance(args[0], Integer):
+            if args[0].value < len(global_args):
+                return global_args[args[0].value]
+        return Array(global_args)
 
 
 #
@@ -1697,7 +1741,6 @@ reserved_names = (
     'LINE',
     '_',
     ',',
-    '+',
     'ERR',
     'PATH',
 
@@ -1729,6 +1772,15 @@ reserved_names = (
     'GE',
     'INDEX',
     'HAS',
+
+    '+',
+    '-',
+    '*',
+    '/',
+    '^',
+    '%',
+    '=',
+    '|',
 
     'AND',
     'OR',
@@ -1839,6 +1891,15 @@ functions = {
     'WAIT': BuiltinFunction('WAIT',
         [[Integer, Float]],
         BFList.wait),
+    'GLOBALS': BuiltinFunction('GLOBALS',
+        [],
+        BFList.get_globals),
+    'LOCALS': BuiltinFunction('LOCALS',
+        [],
+        BFList.get_locals),
+    'ARGV': BuiltinFunction('ARGV',
+        [[Integer, '*']],
+        BFList.get_argv),
 
     'NOT': BuiltinFunction('NOT',
         [['@']],

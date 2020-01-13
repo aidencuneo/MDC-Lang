@@ -1,34 +1,21 @@
-IMPORT 'arraycomp';
-IMPORT 'math';
-IMPORT 'random';
+IMPORT'arraycomp''random';
+NEW makeCells@:@:{o:ARRAY;FOR$1:{i:ARRAY;FOR$0:{i:i+[RANGE0 1]};o:o+i};YIELD o};
+NEW arrayMap@:{p:JOIN$0'';STREPL[STREPL p'1'"\u2588"]'0'' ';"\n"};
+NEW display@:{FOR$0:arrayMap,};
+display[makeCells20 10];
 
-NEW makeCells
-: Integer
-: Integer
-: {
-    output : ARRAY;
-    FOR a : $1 : {
-        inside : ARRAY;
-        FOR b : $0 : {
-            inside : inside ADD [ RANGE 1 ];
-        };
-        output : output PUT inside;
-    };
-    YIELD output;
-};
+EXIT;
 
-NEW display
-: Array
-: {
-    output : '';
-    FOR $0 : {
-        output : output ADD
-
-        ;
-    };
-};
-
-height : 10;
-width  : 10;
-cells  : makeCells width height;
-cells;
+import random
+def make_cells(z,x):
+ o=[]
+ for a in x:
+  o+=[random.randint(0,1)for b in z]
+ return o
+def array_map(a):
+ a=''.join(a)
+ print(a.replace('1','\u2588').replace('0',' '))
+def display(d):
+ for a in d:
+  array_map(a)
+display(make_cells(20,10))

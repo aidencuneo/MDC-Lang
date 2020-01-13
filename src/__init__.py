@@ -20,11 +20,9 @@ for a in sys.argv[1:]:
 if not fname and not options:
     print('No input file given.')
     sys.exit()
-if fname:
-    fname = fname[0]
 
 from loader import get_code
-from var import MDCLError, sig_c, get_input, call_error, initialise_path, run, __version__
+from var import MDCLError, sig_c, get_input, call_error, initialise_path, start, __version__
 
 if options:
     if '-v' in options:
@@ -35,9 +33,18 @@ if options:
         del options[options.index('--version')]
         print('MDCL ' + __version__)
         sys.exit()
+    if '-r' in options:
+        del options[options.index('-r')]
+        code = ' '.join(fname)
+        initialise_path(sys.path[0], os.getcwd())
+        start(code)
+        sys.exit()
 if options:
     print('Command line option ' + options[0] + ' is not recognised.')
     sys.exit()
+
+if fname:
+    fname = fname[0]
 
 if not os.path.isfile(fname):
     call_error("The path: '" + str(fname) + "' could not be found.", 'ioerr')
@@ -50,15 +57,4 @@ if isinstance(code, Exception):
     call_error("The path: '" + str(fname) + "' could not be accessed, "
         'perhaps caused by a permission error or something similar.', 'ioerr')
 
-try:
-    run(code, fname, raw=True)
-except MDCLError as e:
-    call_error(error_type=e)
-except (KeyboardInterrupt, EOFError):
-    sig_c.send('SIGINT')
-except RecursionError:
-    call_error('Too many recursive calls in a row.', 'recursion')
-except ZeroDivisionError:
-    call_error('Attemped division or modulo by zero.', 'zerodivision')
-except Exception as e:
-    call_error(error_type='fatal')
+start(code, fname)
