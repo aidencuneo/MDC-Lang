@@ -51,7 +51,7 @@ if not os.path.isfile(fname):
 
 fname = os.path.abspath(fname)
 dirname = os.path.dirname(fname)
-initialise_path(sys.path[0], dirname)
+initialise_path(os.path.dirname(sys.path[0]), dirname)
 code = get_code(fname)
 if isinstance(code, Exception):
     call_error("The path: '" + str(fname) + "' could not be accessed, "
