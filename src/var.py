@@ -5,7 +5,7 @@ First Commit was at: 1/1/2020.
 
 '''
 
-__version__ = '1.3.7'
+__version__ = '1.3.8'
 
 import ast
 import os
@@ -17,6 +17,7 @@ import string
 import threading
 import time
 import traceback as tb
+import types
 
 from copy import copy
 from functools import partial
@@ -68,6 +69,7 @@ class Function:
                     args[a][b] = args[a][b].__name__
         self.args = args
         self.code = code
+        self.value = '<Function ' + str(self.name) + '>'
 
     def check_args(self, args):
         r = [a for a in self.args if '*' not in a]
@@ -87,9 +89,14 @@ class Function:
     def call(self, args, ex_args=None):
         if isinstance(args, Array):
             args = args.value
+        args = self.check_args(args)
+        if isinstance(self.code, Function):
+            funcargs = evaluate(args[:len(self.args)], args=ex_args, funcargs=True)
+            r = self.code(funcargs)
+            global_vars['_'] = r
+            return r
         if ex_args:
             args += ex_args
-        args = self.check_args(args)
         r = evaluate([self.code], args=args[:len(self.args)])
         global_vars['_'] = r
         return r
@@ -577,7 +584,7 @@ class Array(Datatype):
 class Alphabet(Datatype):
 
     def __init__(self, value=None):
-        mdc_assert(self, value, (tuple, list) + builtin_types, 'ALPHABET', showname=False)
+        mdc_assert(self, value, (tuple, list, set) + builtin_types, 'ALPHABET', showname=False)
         if isinstance(value, set):
             self.value = value
         elif isinstance(value, Alphabet):
@@ -604,17 +611,18 @@ class Alphabet(Datatype):
 
     def check(self):
         has = []
-        print([x.value for x in self.value])
-        exit()
-        temp = sorted(list(self.value), key=lambda x: x.value)
+        temp = list(a if isinstance(a, builtin_types) else translate_datatypes(a) for a in self.value)
+        temp = sorted(temp, key=lambda x: x.value)
         a = 0
         while a < len(temp):
+            if not isinstance(temp[a], builtin_types):
+                temp[a] = translate_datatypes(temp[a])
             if temp[a].value in has:
-                self.value.remove(temp[a])
                 temp.remove(temp[a])
             else:
                 has += [temp[a].value]
                 a += 1
+        self.value = set(temp)
 
 
 class Null(Datatype):
@@ -831,6 +839,24 @@ def eval_statement(code, args, error):
         call_error(str(e), 'eval', error)
 
 
+def pydata_to_mdcldata(pydata):
+    mdcldata = {}
+    for a in dir(pydata):
+        name = a
+        while '_' in a:
+            a = list(a)
+            ind = a.index('_')
+            if ind + 1 < len(a):
+                a[ind + 1] = a[ind + 1].upper()
+            del a[ind]
+            a = ''.join(a)
+        cur_attr = getattr(pydata, name)
+        new_attr = translate_datatypes(cur_attr, error_on_fail=False)
+        if not isinstance(new_attr, type(cur_attr)):
+            mdcldata[a] = new_attr
+    return mdcldata
+
+
 def start(rawcode, filename=None):
     try:
         run(rawcode, filename, raw=True)
@@ -851,6 +877,7 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
     global current_code
     global current_line
     global current_catch
+    global local_vars
     code = rawcode
     if not current_file:
         initialise_global_vars(file=filename)
@@ -1132,7 +1159,19 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                     current_line = oldline
                     break
                 else:
-                    call_error('A script at path ' + pformat(b.value) + ' could not be found or imported from.', 'import')
+                    call_error('No scripts within directory ' + pformat(b.value) + ' could be found or imported from.', 'import')
+        elif a[0] == 'PYIMPORT':
+            if len(a) < 2:
+                call_error('PYIMPORT statement requires at least one argument.', 'argerr')
+            fnames = evaluate(a[1:], error=code[i], args=localargs, funcargs=True)
+            if any(not isinstance(f, String) for f in fnames):
+                call_error('PYIMPORT statement arguments must be of type String.', 'type')
+            for fname in fnames:
+                try:
+                    pydata = __import__(fname.value, globals(), locals(), ['*'])
+                except ImportError:
+                    call_error('A Python script at relative module path ' + pformat(fname.value) + ' could not be found or imported from.', 'import')
+                local_vars += pydata_to_mdcldata(pydata)
         elif a[0] == 'SIG':
             a = evaluate_line(a, start=2, error=code[i], args=localargs)
             if len(a) < 2:
@@ -1202,15 +1241,21 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
     return o
 
 
-def translate_datatypes(dt, dotuple=True):
+def translate_datatypes(dt, dotuple=True, error_on_fail=True):
     if isinstance(dt, tuple([a for a in datatypes_switch.keys() if dotuple or a != tuple])):
         dt = datatypes_switch[type(dt)](dt)
+    if isinstance(dt, types.FunctionType):
+        args = [['@'] for a in dt.__defaults__] if dt.__defaults__ else []
+        args += [['@', '*'] for a in dt.__kwdefaults__] if dt.__kwdefaults__ else []
+        dt = Function(dt.__name__, args, dt)
+    if isinstance(dt, types.BuiltinFunctionType):
+        dt = Function(dt.__name__, [], dt)
     if isinstance(dt, (Array, Alphabet)):
         contents = tuple(translate_datatypes(a) for a in dt.value)
         dt = type(dt)(contents)
-    if isinstance(dt, builtin_types):
+    if isinstance(dt, builtin_types + (Function,)):
         return dt
-    if not (isinstance(dt, tuple) and not dotuple):
+    if not (isinstance(dt, tuple) and not dotuple) and error_on_fail:
         call_error('There was an error during datatype translation for value: ' + pformat(dt) + '.', 'value')
     return dt
 
@@ -1318,14 +1363,8 @@ def eval_functions(exp, error=None, args=None):
             current_file = oldfile
             current_code = oldcode
             current_line = oldline
-            if isinstance(new[a], tuple):
-                print('STOP1', new[a], f)
-                raise e
             del new[a + 1:a + 1 + limit]
         a += 1
-    if tuple in [type(a) for a in new]:
-        print('STOP', exp, new)
-        raise e
     return new
 
 

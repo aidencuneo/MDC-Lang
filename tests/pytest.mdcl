@@ -1,0 +1,2 @@
+PYIMPORT 'os';
+getcwd;
