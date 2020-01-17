@@ -1,0 +1,75 @@
+NEW SPLIT
+: String
+: String *
+: {
+    FA : ARRAY;
+    FC : '';
+
+    FOR i : ARRAY $0 : {
+        IF $1 < $1 > " \n\t\v\r" HAS i : {
+            FA : FA + FC;
+            FC : '';
+        }:ELSE:{
+            FC : FC + i;
+        };
+    };
+
+    YIELD FA + FC;
+};
+
+NEW SPLICE
+: String Array
+: Integer
+: Integer
+: {
+    YIELD `${0}.value[${1}.value:${2}.value]`;
+};
+
+NEW ROUND
+: Integer Float
+: Integer *
+: {
+    roundTo : $1 < $1 > 0;
+    IF roundTo LT 0 : {
+        RAISE
+        'ROUND roundTo value must be greater than or equal to zero.'
+        'value'
+        ;
+    };
+    IF TYPE $0 = 'Integer' : {
+        YIELD $0;
+    }:ELSE:{
+        roundCurrent : STRING $0;
+        roundSplit : SPLIT roundCurrent '.';
+        roundLeft  : roundSplit | 0;
+        roundRight : roundSplit | 1;
+        roundRight : SPLICE roundRight 0 [ roundTo + 1 ];
+
+        IF INTEGER [ roundRight | roundTo ] GE 5 : {
+            IF roundTo = 0 : {
+                roundLeft  : STRING [ INTEGER roundLeft + 1 ];
+                roundRight : '';
+            }:ELSE:{
+                roundRight : STRING [ INTEGER [ SPLICE roundRight 0 roundTo ] + 1 ];
+            };
+        };
+
+        roundOut : roundLeft + [ '.' < roundTo GT 0 > '' ] + roundRight;
+        YIELD FLOAT roundOut < roundTo GT 0 > INTEGER roundOut;
+    };
+    DEL roundCurrent;
+    DEL roundSplit;
+    DEL roundLeft;
+    DEL roundRight;
+    DEL roundOut;
+};
+
+NEW PRINT : @ : {
+    IF TYPE $0 = 'Array' OR [ TYPE $0 = 'Alphabet' ] : {
+        '[';
+        ECHO [$0] ', ' '';
+        "]\n";
+    }:ELSE:{
+        ECHO $0 ', ' "\n";
+    };
+};

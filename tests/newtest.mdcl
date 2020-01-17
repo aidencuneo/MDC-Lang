@@ -1,0 +1,41 @@
+IMPORT 'random';
+
+NEW makeCells
+: Integer
+: Integer
+: {
+    makeCellsOutput : ARRAY;
+    FOR $1 : {
+        makeCellsOutputTwo : ARRAY;
+        FOR $0 : {
+            makeCellsOutputTwo : makeCellsOutputTwo + [ CHOICE [ TO 2 ] ];
+        };
+        makeCellsOutput : makeCellsOutput + makeCellsOutputTwo;
+    };
+    YIELD makeCellsOutput;
+    DEL makeCellsOutput;
+    DEL makeCellsOutputTwo;
+};
+
+NEW display
+: Array
+: {
+    FOR a : $0 : {
+        FOR b : a : {
+            cellKeys | [ INTEGER b ];
+        };
+        "\n";
+    };
+};
+
+cellKeys : " \u2588";
+
+PRINT 'Started.';
+
+timer : TIMER;
+
+cells : makeCells 25 10;
+display cells;
+
+PRINT timer;
+PRINT [ TYPE timer ];

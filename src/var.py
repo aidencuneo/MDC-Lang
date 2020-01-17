@@ -5,9 +5,11 @@ First Commit was at: 1/1/2020.
 
 '''
 
+_debug_mode = True
 __version__ = '1.3.8'
 
 import ast
+import datetime
 import os
 import random
 import re
@@ -84,15 +86,17 @@ class Function:
                 types = '(' + ', '.join([b for b in self.args[a] if b != '*']) + ')'
                 call_error('Argument ' + str(a + 1) + ' of function ' + self.name + ' must fit into: '
                     + types + '. "' + type(args[a]).__name__ + '" is invalid.', 'assert')
+        if len(args) > len(self.args):
+            call_error('Function ' + self.name + ' received too many arguments, '
+                'maximum amount for this Function is ' + str(len(self.args)) + '.', 'argerr')
         return args
 
     def call(self, args, ex_args=None):
         if isinstance(args, Array):
             args = args.value
         args = self.check_args(args)
-        if isinstance(self.code, Function):
-            funcargs = evaluate(args[:len(self.args)], args=ex_args, funcargs=True)
-            r = self.code(funcargs)
+        if isinstance(self.code, (types.FunctionType, types.BuiltinFunctionType)):
+            r = translate_datatypes(self.code(*args))
             global_vars['_'] = r
             return r
         if ex_args:
@@ -108,8 +112,7 @@ class BuiltinFunction(Function):
         if isinstance(args, Array):
             args = args.value
         args = self.check_args(args)
-        funcargs = evaluate(args[:len(self.args)], args=ex_args, funcargs=True)
-        r = self.code(funcargs)
+        r = self.code(args)
         global_vars['_'] = r
         return r
 
@@ -154,27 +157,26 @@ class Datatype:
 class Integer(Datatype):
 
     def __init__(self, value):
-        mdc_assert(self, value, (int, float, str) + (
+        if isinstance(value, tuple):
+            if len(value) == 1:
+                value = value[0]
+        mdc_assert(self, value, (int, float) + (
             Integer, Float, String, Boolean, Null),
             'INTEGER', showname=False)
         if isinstance(value, int):
             self.value = value
         elif isinstance(value, float):
             self.value = round(value)
-        elif isinstance(value, str):
-            try:
-                self.value = int(value)
-            except ValueError:
-                self.value = 0
         elif isinstance(value, Integer):
             self.value = value.value
         elif isinstance(value, Float):
-            self.value = int(round(value.value))
+            self.value = round(value.value)
         elif isinstance(value, String):
             try:
-                self.value = int(value.value)
+                self.value = round(float(value.value))
             except ValueError:
-                self.value = 0
+                call_error('String ' + pformat(value) + ' can not '
+                    'be converted into an Integer.', 'type')
         elif isinstance(value, Boolean):
             self.value = value.value.value
         elif isinstance(value, Null):
@@ -276,18 +278,16 @@ class Integer(Datatype):
 class Float(Datatype):
 
     def __init__(self, value):
-        mdc_assert(self, value, (int, float, str) + (
+        if isinstance(value, tuple):
+            if len(value) == 1:
+                value = value[0]
+        mdc_assert(self, value, (int, float) + (
             Integer, Float, String, Boolean, Null),
             'FLOAT', showname=False)
         if isinstance(value, int):
             self.value = float(value)
         if isinstance(value, float):
             self.value = value
-        elif isinstance(value, str):
-            try:
-                self.value = float(value)
-            except ValueError:
-                self.value = 0.0
         elif isinstance(value, Integer):
             self.value = float(value.value)
         elif isinstance(value, Float):
@@ -296,7 +296,8 @@ class Float(Datatype):
             try:
                 self.value = float(value.value)
             except ValueError:
-                self.value = 0.0
+                call_error('String ' + pformat(value) + ' can not '
+                    'be converted into a Float.', 'type')
         elif isinstance(value, Boolean):
             self.value = float(value.value.value)
         elif isinstance(value, Null):
@@ -386,6 +387,9 @@ class Float(Datatype):
 class String(Datatype):
 
     def __init__(self, value):
+        if isinstance(value, tuple):
+            if len(value) == 1:
+                value = value[0]
         mdc_assert(self, value, (str,) + (
             Integer, Float, String, RegexString, Boolean, Null),
             'STRING', showname=False)
@@ -454,9 +458,10 @@ class String(Datatype):
 
     def INDEX(self, other):
         mdc_assert(self, other, Integer, 'INDEX')
-        a = int(BFList.get_length(self).value)
+        a = int(BFList.get_length((self,)).value)
         if int(other.value) > a - 1:
-            call_error('String index out of range, ' + str(other) + ' > ' + str(a - 1) + '.', 'outofrange')
+            call_error('String index out of range, ' + str(other) + ' > ' + str(a - 1) + '.',
+                'outofrange')
         return self.value[other.value], String
 
     def HAS(self, other):
@@ -468,6 +473,9 @@ class String(Datatype):
 class RegexString(Datatype):
 
     def __init__(self, value):
+        if isinstance(value, tuple):
+            if len(value) == 1:
+                value = value[0]
         mdc_assert(self, value, (str, re.Pattern, String), 'REGEX', showname=False)
         if isinstance(value, (str, re.Pattern)):
             self.value = re.compile(value)
@@ -484,6 +492,42 @@ class RegexString(Datatype):
         mdc_assert(self, other, String, 'EQ')
         a = self.value.match(other.value)
         return bool(a) if a else 0, Boolean
+
+
+class Timer(Datatype):
+
+    def __init__(self, value, starttime=None):
+        if isinstance(value, tuple):
+            if len(value) == 1:
+                value = value[0]
+        mdc_assert(self, value, (datetime.timedelta, Timer, Null), 'TIMER', showname=False)
+        if isinstance(value, datetime.timedelta):
+            self.value = value
+        elif isinstance(value, Timer):
+            self.value = value.value
+        else:
+            self.value = datetime.timedelta()
+        self.starttime = datetime.datetime.now()
+        if starttime is not None:
+            self.starttime = starttime
+        # Timer must return Float of current time elapsed when echoed.
+
+    def __repr__(self):
+        out = 'datetime.datetime.now() - ' + repr(self.starttime) + ', starttime=' + repr(self.starttime)
+        return out
+
+    def __str__(self):
+        return self.__repr__()
+
+
+class Date(Datatype):
+
+    def __init__(self, value):
+        if isinstance(value, tuple):
+            if len(value) == 1:
+                value = value[0]
+        # Fill this in next update.
+        # Value is a datetime.datetime object.
 
 
 class Boolean(Datatype):
@@ -527,7 +571,7 @@ class Array(Datatype):
         if isinstance(value, (tuple, list)):
             self.value = tuple(value)
         elif isinstance(value, String):
-            self.value = (String(a) for a in value.value)
+            self.value = tuple(String(a) for a in value.value)
         elif isinstance(value, (Array, Alphabet)):
             self.value = tuple(value.value)
         elif isinstance(value, Null):
@@ -571,9 +615,10 @@ class Array(Datatype):
 
     def INDEX(self, other):
         mdc_assert(self, other, Integer, 'INDEX')
-        a = int(BFList.get_length(self).value)
+        a = int(BFList.get_length((self,)).value)
         if int(other.value) > a - 1:
-            call_error('Array index out of range, ' + str(other) + ' > ' + str(a - 1) + '.', 'outofrange')
+            call_error('Array index out of range, ' + str(other) + ' > ' + str(a - 1) + '.',
+                'outofrange')
         return self.value[other.value], type(self.value[other.value])
 
     def HAS(self, other):
@@ -584,6 +629,9 @@ class Array(Datatype):
 class Alphabet(Datatype):
 
     def __init__(self, value=None):
+        if isinstance(value, tuple):
+            if len(value) == 1:
+                value = value[0]
         mdc_assert(self, value, (tuple, list, set) + builtin_types, 'ALPHABET', showname=False)
         if isinstance(value, set):
             self.value = value
@@ -738,6 +786,17 @@ class MDCLError(Exception):
     pass
 
 
+class Debug:
+
+    @staticmethod
+    def find_value(value):
+        values = [a for a in local_vars if local_vars[a].value == value.value]
+        if values:
+            return values[0]
+        else:
+            return None
+
+
 def initialise_path(src_path, local_path):
     if not os.path.isdir(src_path):
         call_error("The path: '" + str(src_path) + "' could not be found.", 'dirnotfound')
@@ -749,6 +808,14 @@ def initialise_path(src_path, local_path):
         String(os.path.abspath(src_path + '/builtins')),
         String(src_path),
     ])
+    if not os.path.isfile(src_path + '/startup.mdcl'):
+        call_error('Your installation of MDCL is missing a required library at path: "'
+            + os.path.abspath(src_path + '/startup.mdcl') + '". Please re-install or repair '
+            'your installation. Exports are currently located at: '
+            'https://github.com/aidencuneo/MDC-Lang', 'fatal')
+    with open(src_path + '/startup.mdcl') as f:
+        code = f.read()
+    start(code)
 
 
 def initialise_global_vars(file=None):
@@ -1160,8 +1227,47 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                     break
                 else:
                     call_error('No scripts within directory ' + pformat(b.value) + ' could be found or imported from.', 'import')
-        elif a[0] == 'PYIMPORT':
+        elif a[0] == 'UNIMPORT':
             if len(a) < 2:
+                call_error('UNIMPORT statement requires at least one argument.', 'argerr')
+            fnames = evaluate(a[1:], error=code[i], args=localargs, funcargs=True)
+            if any(not isinstance(f, String) for f in fnames):
+                call_error('UNIMPORT statement arguments must be of type String.', 'type')
+            for fname in fnames:
+                for b in global_vars['PATH'].value:
+                    c = String(str(b.value) + '/' + str(fname.value))
+                    f = c.value
+                    if not f.endswith('.mdcl'):
+                        f += '.mdcl'
+                    newcode = loader.get_code(f)
+                    if isinstance(newcode, Exception):
+                        continue
+                    oldfile = current_file
+                    oldcode = current_code
+                    oldline = current_line
+                    old_local_vars = copy(local_vars)
+                    old_global_vars = copy(global_vars)
+                    old_functions = copy(functions)
+                    run(newcode, f, raw=True)
+                    current_file = oldfile
+                    current_code = oldcode
+                    current_line = oldline
+                    for d in old_local_vars:
+                        if old_local_vars[d] != local_vars[d]:
+                            del local_vars[d]
+                    for d in old_global_vars:
+                        if old_global_vars[d] != global_vars[d]:
+                            del global_vars[d]
+                    for d in old_functions:
+                        if old_functions[d] != functions[d]:
+                            del functions[d]
+                    break
+                else:
+                    call_error('No scripts within directory ' + pformat(b.value) + ' could be unimported.', 'import')
+        elif a[0] == 'PYIMPORT':
+            pass
+            # Probably delete this
+            '''if len(a) < 2:
                 call_error('PYIMPORT statement requires at least one argument.', 'argerr')
             fnames = evaluate(a[1:], error=code[i], args=localargs, funcargs=True)
             if any(not isinstance(f, String) for f in fnames):
@@ -1171,7 +1277,7 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                     pydata = __import__(fname.value, globals(), locals(), ['*'])
                 except ImportError:
                     call_error('A Python script at relative module path ' + pformat(fname.value) + ' could not be found or imported from.', 'import')
-                local_vars += pydata_to_mdcldata(pydata)
+                local_vars += pydata_to_mdcldata(pydata)'''
         elif a[0] == 'SIG':
             a = evaluate_line(a, start=2, error=code[i], args=localargs)
             if len(a) < 2:
@@ -1300,11 +1406,11 @@ def eval_datatypes(exp, error=None, dostrings=False):
             except Exception:
                 call_error('Invalid String.', 'syntax', error)
         elif re.match('^(-|\+)*[0-9]*\.[0-9]+$', new[a]): # Is new[a] a float? If so, assign Float() class.
-            new[a] = Float(new[a])
+            new[a] = Float(float(new[a]))
         elif re.match('^(-|\+)*[0-9]+$', new[a]): # Is new[a] an integer? If so, assign Integer() class.
-            new[a] = Integer(new[a])
+            new[a] = Integer(int(new[a]))
         elif new[a] in ('TRUE', 'FALSE', 'True', 'False'): # Is new[a] a boolean? If so, assign Boolean() class.
-            new[a] = Boolean(new[a])
+            new[a] = Boolean(bool(new[a]))
         elif new[a] in ('null', 'NULL', 'None'): # Is new[a] null? If so, assign Null() class.
             new[a] = Null()
         a += 1
@@ -1325,6 +1431,7 @@ def eval_functions(exp, error=None, args=None):
             f = evaluate(new[a + 1:a + 1 + limit], error=error, args=args, funcargs=True)
             if not isinstance(f, tuple):
                 f = f,
+            f = f[:limit]
             oldfile = current_file
             oldcode = current_code
             oldline = current_line
@@ -1353,6 +1460,7 @@ def eval_functions(exp, error=None, args=None):
             f = evaluate(new[a + 1:a + 1 + limit], error=error, args=args, funcargs=True)
             if not isinstance(f, tuple):
                 f = f,
+            f = f[:limit]
             oldfile = current_file
             oldcode = current_code
             oldline = current_line
@@ -1405,7 +1513,7 @@ def evaluate(exp, error=None, args=None, funcargs=False):
         '^': 'PWR',
         '%': 'MOD',
         '=': 'EQ',
-        '|': 'HAS',
+        '|': 'INDEX',
     }
     new = [a for a in exp]
     new = eval_functions(eval_datatypes(new, error=error), error=error, args=args)
@@ -1756,6 +1864,10 @@ class BFList:
         return Array(local_vars.keys()._value)
 
     @staticmethod
+    def get_functions(args):
+        return Array(list(functions.keys()))
+
+    @staticmethod
     def get_argv(args):
         if isinstance(args[0], Integer):
             if args[0].value < len(global_args):
@@ -1785,6 +1897,8 @@ reserved_names = (
 
     'NEW',
     'IF',
+    'ELIF',
+    'ELSE',
     'WHILE',
     'FOR',
     'TRY',
@@ -1792,6 +1906,8 @@ reserved_names = (
     ':',
     'DEL',
     'IMPORT',
+    'PYIMPORT',
+    'UNIMPORT',
     'DEFINE', # Remake define statement.
     'SIG',
     'RAISE',
@@ -1833,6 +1949,7 @@ reserved_names = (
     'FLOAT',
     'STRING',
     'REGEX',
+    'TIMER',
     'BOOLEAN',
     'NULL',
 
@@ -1842,6 +1959,11 @@ reserved_names = (
     'WRITEFILE',
     'TYPE',
     'ECHO',
+    'WAIT',
+    'GLOBALS',
+    'LOCALS',
+    'FUNCTIONS',
+    'ARGV',
 
     'NOT',
 
@@ -1884,6 +2006,7 @@ datatypes_switch = {
 }
 builtin_types = tuple(set(datatypes_switch.values())) + (
     RegexString,
+    Timer,
 )
 
 global_vars = CompactDict()
@@ -1902,6 +2025,9 @@ functions = {
     'REGEX': BuiltinFunction('REGEX',
         [[String, '*']],
         RegexString),
+    'TIMER': BuiltinFunction('TIMER',
+        [[Timer, '*']],
+        Timer),
     'BOOLEAN': BuiltinFunction('BOOLEAN',
         [['@', '*']],
         Boolean),
@@ -1936,6 +2062,9 @@ functions = {
     'LOCALS': BuiltinFunction('LOCALS',
         [],
         BFList.get_locals),
+    'FUNCTIONS': BuiltinFunction('FUNCTIONS',
+        [],
+        BFList.get_functions),
     'ARGV': BuiltinFunction('ARGV',
         [[Integer, '*']],
         BFList.get_argv),

@@ -22,7 +22,7 @@ if not fname and not options:
     sys.exit()
 
 from loader import get_code
-from var import MDCLError, sig_c, get_input, call_error, initialise_path, start, __version__
+from var import MDCLError, sig_c, get_input, call_error, initialise_path, start, _debug_mode, __version__
 
 if options:
     if '-v' in options:
@@ -36,7 +36,8 @@ if options:
     if '-r' in options:
         del options[options.index('-r')]
         code = ' '.join(fname)
-        initialise_path(os.path.dirname(sys.path[0]), os.getcwd())
+        src_path = sys.path[0] if _debug_mode else os.path.dirname(sys.path[0])
+        initialise_path(src_path, os.getcwd())
         start(code)
         sys.exit()
 if options:
@@ -51,7 +52,8 @@ if not os.path.isfile(fname):
 
 fname = os.path.abspath(fname)
 dirname = os.path.dirname(fname)
-initialise_path(os.path.dirname(sys.path[0]), dirname)
+src_path = sys.path[0] if _debug_mode else os.path.dirname(sys.path[0])
+initialise_path(src_path, dirname)
 code = get_code(fname)
 if isinstance(code, Exception):
     call_error("The path: '" + str(fname) + "' could not be accessed, "
