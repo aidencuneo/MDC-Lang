@@ -30,12 +30,13 @@ NEW display
 
 cellKeys : " \u2588";
 
-PRINT 'Started.';
+ECHO 'Started.';
 
 timer : TIMER;
 
 cells : makeCells 25 10;
 display cells;
 
-PRINT timer;
-PRINT [ TYPE timer ];
+ECHO timer;
+ECHO [ DATE timer ];
+ECHO DATE;

@@ -63,13 +63,3 @@ NEW ROUND
     DEL roundRight;
     DEL roundOut;
 };
-
-NEW PRINT : @ : {
-    IF TYPE $0 = 'Array' OR [ TYPE $0 = 'Alphabet' ] : {
-        '[';
-        ECHO [$0] ', ' '';
-        "]\n";
-    }:ELSE:{
-        ECHO $0 ', ' "\n";
-    };
-};

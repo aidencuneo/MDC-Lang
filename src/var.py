@@ -5,8 +5,8 @@ First Commit was at: 1/1/2020.
 
 '''
 
-_debug_mode = True
-__version__ = '1.3.8'
+_debug_mode = False
+__version__ = '1.3.9'
 
 import ast
 import datetime
@@ -500,24 +500,26 @@ class Timer(Datatype):
         if isinstance(value, tuple):
             if len(value) == 1:
                 value = value[0]
-        mdc_assert(self, value, (datetime.timedelta, Timer, Null), 'TIMER', showname=False)
+        mdc_assert(self, value, (datetime.timedelta, Timer, Date, Null), 'TIMER', showname=False)
         if isinstance(value, datetime.timedelta):
             self.value = value
         elif isinstance(value, Timer):
             self.value = value.value
+        elif isinstance(value, Date):
+            self.value = datetime.timedelta()
+            starttime = value.value
         else:
             self.value = datetime.timedelta()
         self.starttime = datetime.datetime.now()
         if starttime is not None:
             self.starttime = starttime
-        # Timer must return Float of current time elapsed when echoed.
 
     def __repr__(self):
         out = 'datetime.datetime.now() - ' + repr(self.starttime) + ', starttime=' + repr(self.starttime)
         return out
 
     def __str__(self):
-        return self.__repr__()
+        return repr(self)
 
 
 class Date(Datatype):
@@ -526,8 +528,21 @@ class Date(Datatype):
         if isinstance(value, tuple):
             if len(value) == 1:
                 value = value[0]
-        # Fill this in next update.
-        # Value is a datetime.datetime object.
+        mdc_assert(self, value, (datetime.datetime, Timer, Date, Null), 'DATE', showname=False)
+        if isinstance(value, datetime.datetime):
+            self.value = value
+        elif isinstance(value, Timer):
+            self.value = value.starttime
+        elif isinstance(value, Date):
+            self.value = value.value
+        else:
+            self.value = datetime.datetime.now()
+
+    def __repr__(self):
+        return repr(self.value)
+
+    def __str__(self):
+        return str(self.value)
 
 
 class Boolean(Datatype):
@@ -795,6 +810,10 @@ class Debug:
             return values[0]
         else:
             return None
+
+    @staticmethod
+    def ts(lst):
+        return [type(a) for a in lst]
 
 
 def initialise_path(src_path, local_path):
@@ -2007,6 +2026,7 @@ datatypes_switch = {
 builtin_types = tuple(set(datatypes_switch.values())) + (
     RegexString,
     Timer,
+    Date,
 )
 
 global_vars = CompactDict()
@@ -2026,8 +2046,11 @@ functions = {
         [[String, '*']],
         RegexString),
     'TIMER': BuiltinFunction('TIMER',
-        [[Timer, '*']],
+        [['@', '*']],
         Timer),
+    'DATE': BuiltinFunction('DATE',
+        [['@', '*']],
+        Date),
     'BOOLEAN': BuiltinFunction('BOOLEAN',
         [['@', '*']],
         Boolean),
