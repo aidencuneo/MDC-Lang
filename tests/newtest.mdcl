@@ -1,42 +1,14 @@
 IMPORT 'random';
 
-NEW makeCells
-: Integer
-: Integer
+NEW DString
+: String
 : {
-    makeCellsOutput : ARRAY;
-    FOR $1 : {
-        makeCellsOutputTwo : ARRAY;
-        FOR $0 : {
-            makeCellsOutputTwo : makeCellsOutputTwo + [ CHOICE [ TO 2 ] ];
-        };
-        makeCellsOutput : makeCellsOutput + makeCellsOutputTwo;
-    };
-    YIELD makeCellsOutput;
-    DEL makeCellsOutput;
-    DEL makeCellsOutputTwo;
-};
-
-NEW display
-: Array
-: {
-    FOR a : $0 : {
-        FOR b : a : {
-            cellKeys | [ INTEGER b ];
-        };
-        "\n";
+    TRY : {
+        YIELD DATE `datetime.datetime.strptime(${0}.value, '%Y-%m-%d %H:%M:%S.%f')`;
+    } : CATCH 'eval' : {
+        RAISE 'syntax' 'Invalid DString format. Format must match: YEAR-MONTH-DAY HOUR:MINUTE:SECOND.MICROSECOND';
     };
 };
 
-cellKeys : " \u2588";
-
-ECHO 'Started.';
-
-timer : TIMER;
-
-cells : makeCells 25 10;
-display cells;
-
-ECHO timer;
-ECHO [ DATE timer ];
-ECHO DATE;
+a : DString '2020-03-21 16:59:59.1';
+ECHO a;

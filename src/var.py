@@ -5,8 +5,8 @@ First Commit was at: 1/1/2020.
 
 '''
 
-_debug_mode = False
-__version__ = '1.3.9'
+_debug_mode = True
+__version__ = '1.4.0'
 
 import ast
 import datetime
@@ -95,7 +95,7 @@ class Function:
         if isinstance(args, Array):
             args = args.value
         args = self.check_args(args)
-        if isinstance(self.code, (types.FunctionType, types.BuiltinFunctionType)):
+        if isinstance(self.code, (types.FunctionType, types.BuiltinFunctionType, type)):
             r = translate_datatypes(self.code(*args))
             global_vars['_'] = r
             return r
@@ -117,44 +117,47 @@ class BuiltinFunction(Function):
         return r
 
 
-class Datatype:
+class BaseDatatype:
 
     def __init__(self, value):
         self.value = value.value
 
     def do_action(self, action, args):
         if action == 'ADD':
-            r = self.ADD(*args)
+            f = self.ADD
         elif action == 'SUB':
-            r = self.SUB(*args)
+            f = self.SUB
         elif action == 'MULT':
-            r = self.MULT(*args)
+            f = self.MULT
         elif action == 'DIV':
-            r = self.DIV(*args)
+            f = self.DIV
         elif action == 'PWR':
-            r = self.PWR(*args)
+            f = self.PWR
         elif action == 'MOD':
-            r = self.MOD(*args)
+            f = self.MOD
         elif action == 'EQ':
-            r = self.EQ(*args)
+            f = self.EQ
         elif action == 'LT':
-            r = self.LT(*args)
+            f = self.LT
         elif action == 'GT':
-            r = self.GT(*args)
+            f = self.GT
         elif action == 'LE':
-            r = self.LE(*args)
+            f = self.LE
         elif action == 'GE':
-            r = self.GE(*args)
+            f = self.GE
         elif action == 'INDEX':
-            r = self.INDEX(*args)
+            f = self.INDEX
         elif action == 'HAS':
-            r = self.HAS(*args)
+            f = self.HAS
         else:
             raise AttributeError
-        return r
+        if isinstance(f, (Function, BuiltinFunction)):
+            value = f.call((self,) + args)
+            return value, type(value)
+        return f(*args)
 
 
-class Integer(Datatype):
+class Integer(BaseDatatype):
 
     def __init__(self, value):
         if isinstance(value, tuple):
@@ -275,7 +278,7 @@ class Integer(Datatype):
             return self.value >= other.value.value, Boolean
 
 
-class Float(Datatype):
+class Float(BaseDatatype):
 
     def __init__(self, value):
         if isinstance(value, tuple):
@@ -384,14 +387,13 @@ class Float(Datatype):
             return self.value >= other.value.value, Boolean
 
 
-class String(Datatype):
+class String(BaseDatatype):
 
     def __init__(self, value):
         if isinstance(value, tuple):
             if len(value) == 1:
                 value = value[0]
-        mdc_assert(self, value, (str,) + (
-            Integer, Float, String, RegexString, Boolean, Null),
+        mdc_assert(self, value, (str,) + datatypes,
             'STRING', showname=False)
         if isinstance(value, str):
             self.value = value
@@ -401,6 +403,8 @@ class String(Datatype):
             self.value = str(value.value.pattern)
         elif isinstance(value, Boolean):
             self.value = 'TRUE' if value.value.value else 'FALSE'
+        elif isinstance(value, datatypes):
+            self.value = String(value.value).value
 
     def __repr__(self):
         return pformat(self.value)
@@ -470,7 +474,7 @@ class String(Datatype):
             return other.value in self.value, Boolean
 
 
-class RegexString(Datatype):
+class RegexString(BaseDatatype):
 
     def __init__(self, value):
         if isinstance(value, tuple):
@@ -494,7 +498,7 @@ class RegexString(Datatype):
         return bool(a) if a else 0, Boolean
 
 
-class Timer(Datatype):
+class Timer(BaseDatatype):
 
     def __init__(self, value, starttime=None):
         if isinstance(value, tuple):
@@ -522,7 +526,7 @@ class Timer(Datatype):
         return repr(self)
 
 
-class Date(Datatype):
+class Date(BaseDatatype):
 
     def __init__(self, value):
         if isinstance(value, tuple):
@@ -545,7 +549,7 @@ class Date(Datatype):
         return str(self.value)
 
 
-class Boolean(Datatype):
+class Boolean(BaseDatatype):
 
     def __init__(self, value):
         if isinstance(value, tuple):
@@ -579,7 +583,7 @@ class Boolean(Datatype):
         return bool(self.value)
 
 
-class Array(Datatype):
+class Array(BaseDatatype):
 
     def __init__(self, value=None):
         mdc_assert(self, value, (tuple, list) + builtin_types, 'ARRAY', showname=False)
@@ -641,7 +645,7 @@ class Array(Datatype):
         return any(a.value == other.value for a in self.value), Boolean
 
 
-class Alphabet(Datatype):
+class Alphabet(BaseDatatype):
 
     def __init__(self, value=None):
         if isinstance(value, tuple):
@@ -688,7 +692,7 @@ class Alphabet(Datatype):
         self.value = set(temp)
 
 
-class Null(Datatype):
+class Null(BaseDatatype):
 
     def __init__(self, *args):
         self.value = None
@@ -964,6 +968,7 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
     global current_line
     global current_catch
     global local_vars
+    global datatypes
     code = rawcode
     if not current_file:
         initialise_global_vars(file=filename)
@@ -992,6 +997,28 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
         if a[0] == 'NEW':
             if len(a) < 4 or ':' not in a:
                 call_error('Function declaration requires at least a function name, function code, and the ":" separator.', 'argerr')
+            specialmethod = False
+            name = a[1]
+            if a[1] == '!':
+                specialmethod = True
+                name = '!' + a[2]
+                del a[1]
+            func = a[-1]
+            arguments = tuple(filter(None, split_list(a[2:-1], ':')))
+            types = [b.__name__ for b in builtin_types]
+            optionals = False
+            for b in arguments:
+                for c in b:
+                    if c not in types and not c == '*' and not c == '@' and not specialmethod:
+                        call_error(pformat(c) + ' is not defined as a type.', 'attr')
+                if '*' in b:
+                    optionals = True
+                elif optionals and not '*' in b:
+                    call_error('Optional function arguments must be after all positional arguments.', 'syntax')
+            functions[name] = Function(name, arguments, func)
+        elif a[0] == 'DATATYPE':
+            if len(a) < 4 or ':' not in a:
+                call_error('Datatype declaration requires at least a datatype name, initialisation code, and the ":" separator.', 'argerr')
             name = a[1]
             func = a[-1]
             arguments = tuple(filter(None, split_list(a[2:-1], ':')))
@@ -1004,8 +1031,29 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                 if '*' in b:
                     optionals = True
                 elif optionals and not '*' in b:
-                    call_error('Optional function arguments must be after all positional arguments.', 'syntax')
-            functions[name] = Function(name, arguments, func)
+                    call_error('Optional initialisation function arguments must be after all positional arguments.', 'syntax')
+            if name in globals() or name in locals() or name in builtin_types:
+                call_error('Invalid Datatype name. Datatype name must not already be defined.', 'defined')
+            exec('class ' + name + '(BaseDatatype):pass', globals())
+            this = eval(name)
+            actions = {b[1:] : functions[b] for b in functions if b[0] == '!' and b[1:] in mdcl_keywords + ('ECHO',)}
+            if 'ECHO' not in actions:
+                call_error('Datatype is missing an ECHO function.', 'attr')
+            for a in actions:
+                setattr(this, a, actions[a])
+            def __init__(self, args):
+                if not isinstance(args, (list, tuple)):
+                    args = args,
+                self.value = evaluate([func], args=args)
+            def __repr__(self):
+                return pformat(evaluate([actions['ECHO'], self]))
+            this.__init__ = __init__
+            this.__repr__ = __repr__
+            datatypes += (this,)
+            functions[name] = Function(name, arguments, this)
+            del this
+            del __init__
+            del __repr__
         elif a[0] == 'IF':
             if len(a) < 3 or ':' not in a:
                 call_error('IF statement requires at least a condition, the ":" separator, and code to run.', 'syntax')
@@ -1283,8 +1331,8 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                     break
                 else:
                     call_error('No scripts within directory ' + pformat(b.value) + ' could be unimported.', 'import')
-        elif a[0] == 'PYIMPORT':
-            pass
+        #elif a[0] == 'PYIMPORT':
+        #    pass
             # Probably delete this
             '''if len(a) < 2:
                 call_error('PYIMPORT statement requires at least one argument.', 'argerr')
@@ -1378,7 +1426,7 @@ def translate_datatypes(dt, dotuple=True, error_on_fail=True):
     if isinstance(dt, (Array, Alphabet)):
         contents = tuple(translate_datatypes(a) for a in dt.value)
         dt = type(dt)(contents)
-    if isinstance(dt, builtin_types + (Function,)):
+    if isinstance(dt, datatypes + (Function,)):
         return dt
     if not (isinstance(dt, tuple) and not dotuple) and error_on_fail:
         call_error('There was an error during datatype translation for value: ' + pformat(dt) + '.', 'value')
@@ -1391,7 +1439,7 @@ def eval_datatypes(exp, error=None, dostrings=False):
     new = [a for a in exp]
     a = 0
     while a < len(new):
-        if isinstance(new[a], builtin_types):
+        if isinstance(new[a], datatypes):
             a += 1
             continue
         if isinstance(new[a], str):
@@ -1462,17 +1510,19 @@ def eval_functions(exp, error=None, args=None):
             current_code = oldcode
             current_line = oldline
             del new[a + 1:a + 1 + limit]
-        if isinstance(new[a], builtin_types):
+        if isinstance(new[a], datatypes):
             pass
         elif new[a].startswith('args[') and new[a].endswith(']'):
             key = int(new[a][5:-1])
             if args:
                 if key >= len(args):
-                    call_error('Local argument list index out of range, ' + str(key) + ' > ' + str(len(args) - 1) + '.', 'outofrange', error)
+                    call_error('Local argument list index out of range, ' + str(key) + ' > ' + str(len(args) - 1) + '.',
+                        'outofrange', error)
                 new[a] = args[key]
             else:
                 if key >= len(global_args):
-                    call_error('Global argument list index out of range, ' + str(key) + ' > ' + str(len(global_args) - 1) + '.', 'outofrange', error)
+                    call_error('Global argument list index out of range, ' + str(key) + ' > ' + str(len(global_args) - 1) + '.',
+                        'outofrange', error)
                 new[a] = global_args[key]
         elif new[a] in functions:
             limit = len(functions[new[a]].args)
@@ -1506,24 +1556,24 @@ def evaluate_line(oldline, start, end=None, error=None, args=None):
     return oldline
 
 
+def make_evaluable(line):
+    if not isinstance(line, (list, tuple)):
+        line = line,
+    return [
+        (type(a).__name__ + '(' + (
+            make_evaluable(a.value)[0]
+            if isinstance(a.value, datatypes)
+            else pformat(a)
+        ) + ')')
+        if isinstance(a, datatypes)
+        else a for a in line
+        if a is not None
+    ]
+
+
 def evaluate(exp, error=None, args=None, funcargs=False):
     if not exp:
         return Null()
-    kwds = (
-        'ADD',
-        'SUB',
-        'MULT',
-        'DIV',
-        'PWR',
-        'MOD',
-        'EQ',
-        'LT',
-        'GT',
-        'LE',
-        'GE',
-        'INDEX',
-        'HAS',
-    )
     reps = {
         '+': 'ADD',
         '-': 'SUB',
@@ -1538,12 +1588,12 @@ def evaluate(exp, error=None, args=None, funcargs=False):
     new = eval_functions(eval_datatypes(new, error=error), error=error, args=args)
     a = 0
     while a < len(new):
-        if isinstance(new[a], builtin_types + (type(None),)):
+        if isinstance(new[a], datatypes + (type(None),)):
             a += 1
             continue
         if new[a] in reps:
             new[a] = reps[new[a]]
-        if new[a] in kwds:
+        if new[a] in mdcl_keywords:
             if a - 1 < 0:
                 call_error('Missing first argument for ' + new[a] + ' method.', 'syntax', error)
             if a + 1 >= len(new):
@@ -1557,6 +1607,13 @@ def evaluate(exp, error=None, args=None, funcargs=False):
                 a -= 1
             except AttributeError:
                 call_error('Type ' + type(new[a - 1]).__name__ + ' does not have a method for handling ' + new[a], 'attr', error)
+        elif new[a] == '.':
+            pass
+            # Perform gettattr.
+            # Get right hand argument from left hand argument.
+            # Equivalent to left_hand.right_hand
+            # Right hand argument should not be String,
+            # it should be a regular word.
         elif new[a] == 'AND':
             if a - 1 < 0:
                 call_error('AND requires a left hand argument.', 'argerr', error)
@@ -1707,10 +1764,7 @@ def evaluate(exp, error=None, args=None, funcargs=False):
         elif new[a] in local_vars:
             new[a] = local_vars[new[a]]
         elif new[a] in global_vars:
-            if new[a] == '_':
-                del new[a]
-            else:
-                new[a] = global_vars[new[a]]
+            new[a] = global_vars[new[a]]
         elif new[a] in reserved_names:
             call_error('Invalid syntactical usage of reserved name.', 'syntax')
         elif new[a] not in functions:
@@ -1719,7 +1773,7 @@ def evaluate(exp, error=None, args=None, funcargs=False):
                 token = token[:97] + '...'
             call_error('Undefined Token: ' + pformat(token), 'syntax', error)
         a += 1
-    code = ','.join([(type(a).__name__ + '(' + pformat(a) + ')') if isinstance(a, builtin_types) else a for a in new if a is not None])
+    code = ','.join(make_evaluable(new))
     out = code
     if code and code != ',':
         try:
@@ -1904,7 +1958,6 @@ current_file = ''
 current_code = ''
 current_line = 1
 current_catch = {}
-global_args = [String(a) for a in sys.argv[1:]]
 
 reserved_names = (
     'FILE',
@@ -1989,6 +2042,22 @@ reserved_names = (
     'EXIT',
 )
 
+mdcl_keywords = (
+    'ADD',
+    'SUB',
+    'MULT',
+    'DIV',
+    'PWR',
+    'MOD',
+    'EQ',
+    'LT',
+    'GT',
+    'LE',
+    'GE',
+    'INDEX',
+    'HAS',
+)
+
 start_error_tags = error_tags = CompactDict({
     'eval': 'ERROR attempting to run eval statement',
     'exp': 'ERROR attempting to evaluate expression',
@@ -2011,12 +2080,15 @@ start_error_tags = error_tags = CompactDict({
     'zerodivision': 'ZERO DIVISION ERROR',
     'readonly': 'READONLY VALUE',
     'fatal': 'FATAL ERROR',
+    'defined': 'ALREADY DEFINED VALUE',
 })
 
 datatypes_switch = {
     str: String,
     int: Integer,
     float: Float,
+    datetime.datetime: Date,
+    datetime.timedelta: Timer,
     bool: Boolean,
     tuple: Array,
     list: Array,
@@ -2025,12 +2097,12 @@ datatypes_switch = {
 }
 builtin_types = tuple(set(datatypes_switch.values())) + (
     RegexString,
-    Timer,
-    Date,
 )
 
-global_vars = CompactDict()
+datatypes = copy(builtin_types)
 local_vars = CompactDict()
+global_vars = CompactDict()
+global_args = [String(a) for a in sys.argv[1:]]
 
 functions = {
     'INTEGER': BuiltinFunction('INTEGER',

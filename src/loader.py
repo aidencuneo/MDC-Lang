@@ -79,8 +79,8 @@ def tokenise(line):
         elif a in whitespace:
             p = 'W'
         if (q != p and p != 'W' or p == 'S') and not (
-            t == '.' and p in 'AD'
-        ) and not(
+            t == '.' and p in 'D'
+        ) and not (
             t in ('-', '+') and p in 'D'
         ) and not (
             sq or dq or bt or rb or sb > 0 or cb > 0 or lg > 0
