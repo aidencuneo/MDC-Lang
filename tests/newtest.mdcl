@@ -10,5 +10,43 @@ NEW DString
     };
 };
 
-a : DString '2020-03-21 16:59:59.1';
-ECHO a;
+NEW Test
+: Integer *
+: {
+    count : $0 < $0 AND [ $0 GT 0 ] > 1;
+
+    results : ARRAY [ FLOAT ];
+
+    FOR count : {
+        startTime : DATE;
+
+        a : '.';
+        ECHO a*10;
+
+        aElapsed : [ DATE ] - startTime;
+
+        startTime : DATE;
+
+        a : '.';
+        FOR10:{a};
+        "\n";
+
+        bElapsed : [ DATE ] - startTime;
+
+        results : results + [ 100 - [ aElapsed / bElapsed * 100 ] ];
+    };
+
+    results | (0:);
+
+    ECHO "\n" + '-- Difference --';
+    ECHO [
+        'MULT is ' + [
+            100 - [
+                [aElapsed / bElapsed] * 100
+            ]
+        ] + '% faster than FOR.'
+    ];
+
+};
+
+Test 3;

@@ -413,13 +413,14 @@ class String(BaseDatatype):
         return self.value
 
     def ADD(self, other):
-        mdc_assert(self, other, (Integer, Float, String, Array), 'ADD')
+        mdc_assert(self, other, datatypes, 'ADD')
         if isinstance(other, (Integer, Float)):
             return self.value + str(other.value), String
         if isinstance(other, String):
             return self.value + other.value, String
         if isinstance(other, Array):
             return (self.value,) + other.value, Array
+        return str(self.value) + str(other.value), String
 
     def SUB(self, other):
         mdc_assert(self, other, (Integer, String), 'SUB')
@@ -498,32 +499,41 @@ class RegexString(BaseDatatype):
         return bool(a) if a else 0, Boolean
 
 
-class Timer(BaseDatatype):
+class Timedelta(BaseDatatype):
 
-    def __init__(self, value, starttime=None):
+    def __init__(self, value):
         if isinstance(value, tuple):
             if len(value) == 1:
                 value = value[0]
-        mdc_assert(self, value, (datetime.timedelta, Timer, Date, Null), 'TIMER', showname=False)
+        mdc_assert(self, value, (datetime.timedelta, Timedelta, Date, Null), 'TIMEDELTA', showname=False)
         if isinstance(value, datetime.timedelta):
             self.value = value
-        elif isinstance(value, Timer):
+        elif isinstance(value, Timedelta):
             self.value = value.value
-        elif isinstance(value, Date):
-            self.value = datetime.timedelta()
-            starttime = value.value
         else:
             self.value = datetime.timedelta()
-        self.starttime = datetime.datetime.now()
-        if starttime is not None:
-            self.starttime = starttime
 
     def __repr__(self):
-        out = 'datetime.datetime.now() - ' + repr(self.starttime) + ', starttime=' + repr(self.starttime)
-        return out
+        return repr(self.value)
 
     def __str__(self):
-        return repr(self)
+        return str(self.value)
+
+    def ADD(self, other):
+        mdc_assert(self, other, (Date, Timedelta), 'SUB')
+        return self.value + other.value, Timedelta
+
+    def SUB(self, other):
+        mdc_assert(self, other, (Date, Timedelta), 'SUB')
+        return self.value - other.value, Timedelta
+
+    def MULT(self, other):
+        mdc_assert(self, other, (Date, Timedelta), 'MULT')
+        return self.value * other.value, Timedelta
+
+    def DIV(self, other):
+        mdc_assert(self, other, (Date, Timedelta), 'DIV')
+        return self.value / other.value, Float
 
 
 class Date(BaseDatatype):
@@ -532,10 +542,10 @@ class Date(BaseDatatype):
         if isinstance(value, tuple):
             if len(value) == 1:
                 value = value[0]
-        mdc_assert(self, value, (datetime.datetime, Timer, Date, Null), 'DATE', showname=False)
+        mdc_assert(self, value, (datetime.datetime, Timedelta, Date, Null), 'DATE', showname=False)
         if isinstance(value, datetime.datetime):
             self.value = value
-        elif isinstance(value, Timer):
+        elif isinstance(value, Timedelta):
             self.value = value.starttime
         elif isinstance(value, Date):
             self.value = value.value
@@ -547,6 +557,42 @@ class Date(BaseDatatype):
 
     def __str__(self):
         return str(self.value)
+
+    def ADD(self, other):
+        mdc_assert(self, other, (Date, Timedelta), 'SUB')
+        return self.value + other.value, Timedelta
+
+    def SUB(self, other):
+        mdc_assert(self, other, (Date, Timedelta), 'SUB')
+        return self.value - other.value, Timedelta
+
+
+class Slice(BaseDatatype):
+
+    def __init__(self, value):
+        if isinstance(value, tuple):
+            if len(value) == 1:
+                value = value[0]
+        mdc_assert(self, value, (str, String, Slice), 'SPLICE', showname=False)
+        if isinstance(value, str):
+            value = self.make_slice(value)
+        elif isinstance(value, String):
+            value = self.make_slice(value.value)
+        elif isinstance(value, Slice):
+            value = self.make_slice(value.display())
+
+    def __repr__(self):
+        self.display()
+
+    def __str__(self):
+        self.display()
+
+    def display(self):
+        return ''
+
+    def make_slice(self, value):
+        print(value)
+        return value
 
 
 class Boolean(BaseDatatype):
@@ -1743,6 +1789,16 @@ def evaluate(exp, error=None, args=None, funcargs=False):
                 new[a] = Null()
             elif len(value) == 1:
                 new[a] = value[0]
+        elif new[a].startswith('(') or new[a].endswith(')'):
+            print(new)
+            if not new[a].startswith('('):
+                call_error('Unmatched ' + pformat('(') + '.', 'syntax')
+            if not new[a].endswith(')'):
+                call_error('Unmatched ' + pformat(')') + '.', 'syntax')
+            print(new[a])
+            new[a] = Slice(new[a])
+            print(new[a], type(new[a]))
+            exit()
         elif new[a] == 'ARRAY':
             contents = new[a + 1] if a < len(new) - 1 else []
             if contents:
@@ -2088,7 +2144,7 @@ datatypes_switch = {
     int: Integer,
     float: Float,
     datetime.datetime: Date,
-    datetime.timedelta: Timer,
+    datetime.timedelta: Timedelta,
     bool: Boolean,
     tuple: Array,
     list: Array,
@@ -2097,6 +2153,7 @@ datatypes_switch = {
 }
 builtin_types = tuple(set(datatypes_switch.values())) + (
     RegexString,
+    Slice,
 )
 
 datatypes = copy(builtin_types)
@@ -2117,12 +2174,15 @@ functions = {
     'REGEX': BuiltinFunction('REGEX',
         [[String, '*']],
         RegexString),
-    'TIMER': BuiltinFunction('TIMER',
+    'TIMEDELTA': BuiltinFunction('TIMEDELTA',
         [['@', '*']],
-        Timer),
+        Timedelta),
     'DATE': BuiltinFunction('DATE',
         [['@', '*']],
         Date),
+    'SLICE': BuiltinFunction('SLICE',
+        [['@', '*']],
+        Slice),
     'BOOLEAN': BuiltinFunction('BOOLEAN',
         [['@', '*']],
         Boolean),
