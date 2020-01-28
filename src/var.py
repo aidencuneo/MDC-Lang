@@ -6,7 +6,7 @@ First Commit was at: 1/1/2020.
 '''
 
 _debug_mode = True
-__version__ = '1.4.0'
+__version__ = '1.4.1'
 
 import ast
 import datetime
@@ -573,26 +573,80 @@ class Slice(BaseDatatype):
         if isinstance(value, tuple):
             if len(value) == 1:
                 value = value[0]
-        mdc_assert(self, value, (str, String, Slice), 'SPLICE', showname=False)
+        mdc_assert(self, value, (str, String, Slice), 'SLICE', showname=False)
         if isinstance(value, str):
-            value = self.make_slice(value)
+            self.value = self.make_slice(value)
         elif isinstance(value, String):
-            value = self.make_slice(value.value)
+            self.value = self.make_slice(value.value)
         elif isinstance(value, Slice):
-            value = self.make_slice(value.display())
+            self.value = self.make_slice(value.display())
 
     def __repr__(self):
-        self.display()
+        return pformat(self.display())
 
     def __str__(self):
-        self.display()
+        return self.display()
 
     def display(self):
-        return ''
+        return '(' + ':'.join([str(a) for a in self.value]) + ')'
 
     def make_slice(self, value):
-        print(value)
+        value = value.strip('()')
+        if ':' in value:
+            value = value.split(':')
+        else:
+            value = (value, value, '')
+        if len(value) > 3:
+            call_error('Slice received too many arguments, maximum is 3.', 'argerr')
+        while len(value) < 3:
+            value += ['']
+        if not value[0]:
+            value[0] = '0'
+        if not value[1]:
+            value[1] = '.'
+        if not value[2]:
+            value[2] = '1'
+        try:
+            value[0] = int(value[0])
+        except ValueError:
+            call_error('Non-Integer value found in position 0 of Slice.', 'value')
+        try:
+            value[1] = int(value[1])
+        except ValueError:
+            if value[1] != '.':
+                call_error('Non-Integer value found (or missing dot) in position 1 of Slice.', 'value')
+        try:
+            value[2] = int(value[2])
+        except ValueError:
+            call_error('Non-Integer value found in position 2 of Slice.', 'value')
         return value
+
+    def do_slice(self, obj):
+        if isinstance(obj, (String, Array, Alphabet)):
+            start = self.value[0]
+            stop = len(obj.value) if self.value[1] == '.' else self.value[1]
+            skip = self.value[2]
+            if start and stop < len(obj.value) and skip != 1:
+                newval = obj.value[start:stop:skip]
+            elif start and stop < len(obj.value):
+                newval = obj.value[start:stop]
+            elif start and skip != 1:
+                newval = obj.value[start::skip]
+            elif start:
+                newval = obj.value[start:]
+            elif stop < len(obj.value) and skip != 1:
+                newval = obj.value[:stop:skip]
+            elif skip != 1:
+                newval = obj.value[::skip]
+            if isinstance(obj, String):
+                return String(newval)
+            if isinstance(obj, Array):
+                return Array(newval)
+            if isinstance(obj, Alphabet):
+                return Alphabet(newval)
+        if not 'SLICE' in dir(obj):
+            call_error('Datatype ' + type(obj).__name__ + ' does not have a method to deal with SLICE.', 'attr')
+        return obj.SLICE(self)
 
 
 class Boolean(BaseDatatype):
@@ -1040,6 +1094,9 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
             a = replacekeys(code[i], args=localargs)
         else:
             a = replacekeys(loader.tokenise(code[i]), args=localargs)
+        if not a:
+            i += 1
+            continue
         if a[0] == 'NEW':
             if len(a) < 4 or ':' not in a:
                 call_error('Function declaration requires at least a function name, function code, and the ":" separator.', 'argerr')
@@ -1634,7 +1691,9 @@ def evaluate(exp, error=None, args=None, funcargs=False):
     new = eval_functions(eval_datatypes(new, error=error), error=error, args=args)
     a = 0
     while a < len(new):
-        if isinstance(new[a], datatypes + (type(None),)):
+        if isinstance(new[a], datatypes + (type(None),)) and not (
+            isinstance(new[a], Slice)
+        ):
             a += 1
             continue
         if new[a] in reps:
@@ -1647,12 +1706,20 @@ def evaluate(exp, error=None, args=None, funcargs=False):
             try:
                 vals = new[a - 1].do_action(new[a], (evaluate([new[a + 1]], error=error, args=args),))
                 settype = vals[1] if isinstance(vals, tuple) else type(new[a - 1])
-                new[a] = settype(vals[0])
+                new[a] = settype(vals[0] if isinstance(vals, tuple) else vals)
                 del new[a + 1]
                 del new[a - 1]
                 a -= 1
             except AttributeError:
-                call_error('Type ' + type(new[a - 1]).__name__ + ' does not have a method for handling ' + new[a], 'attr', error)
+                call_error('Type ' + type(new[a - 1]).__name__ + ' does not have a method for handling ' + new[a],
+                    'attr', error)
+        elif isinstance(new[a], Slice):
+            if a - 1 >= 0:
+                vals = new[a].do_slice(new[a - 1])
+                settype = vals[1] if isinstance(vals, tuple) else type(new[a - 1])
+                new[a] = settype(vals[0] if isinstance(vals, tuple) else vals)
+                del new[a - 1]
+                a -= 1
         elif new[a] == '.':
             pass
             # Perform gettattr.
@@ -1790,15 +1857,12 @@ def evaluate(exp, error=None, args=None, funcargs=False):
             elif len(value) == 1:
                 new[a] = value[0]
         elif new[a].startswith('(') or new[a].endswith(')'):
-            print(new)
             if not new[a].startswith('('):
                 call_error('Unmatched ' + pformat('(') + '.', 'syntax')
             if not new[a].endswith(')'):
                 call_error('Unmatched ' + pformat(')') + '.', 'syntax')
-            print(new[a])
             new[a] = Slice(new[a])
-            print(new[a], type(new[a]))
-            exit()
+            a -= 1
         elif new[a] == 'ARRAY':
             contents = new[a + 1] if a < len(new) - 1 else []
             if contents:

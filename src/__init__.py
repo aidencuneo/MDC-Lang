@@ -8,6 +8,7 @@ First Commit was at: 1/1/2020.
 import os.path
 import signal
 import sys
+sys.setrecursionlimit(5000)
 
 fname = []
 options = []
