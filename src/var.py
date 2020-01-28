@@ -6,7 +6,7 @@ First Commit was at: 1/1/2020.
 '''
 
 _debug_mode = True
-__version__ = '1.4.1'
+__version__ = '1.4.2'
 
 import ast
 import datetime
@@ -63,15 +63,33 @@ class SignalCatches:
 
 class Function:
 
-    def __init__(self, name, args, code):
-        self.name = name
-        for a in range(len(args)):
-            for b in range(len(args[a])):
-                if isinstance(args[a][b], type):
-                    args[a][b] = args[a][b].__name__
-        self.args = args
-        self.code = code
+    def __init__(self, name, args=None, code=None):
+        if isinstance(name, (Function, BuiltinFunction)):
+            self.name = name.name
+            self.args = name.args
+            self.code = name.code
+        else:
+            if args is None or code is None:
+                call_error('Function can not be declared without second or third arguments '
+                    'if first argument is not a Function. This is a Python error.', 'fatal')
+            self.name = name
+            for a in range(len(args)):
+                for b in range(len(args[a])):
+                    if isinstance(args[a][b], type):
+                        args[a][b] = args[a][b].__name__
+            self.args = args
+            self.code = code
         self.value = '<Function ' + str(self.name) + '>'
+
+    def __repr__(self):
+        this = Debug.find_value(self)
+        if this:
+            this = 'local_vars[' + pformat(this) + ']'
+            return this
+        return 'Function(' + pformat(self.name) + ', ' + pformat(self.args) + ', ' + pformat(self.code) + ')'
+
+    def __str__(self):
+        return self.value
 
     def check_args(self, args):
         r = [a for a in self.args if '*' not in a]
@@ -1118,7 +1136,9 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                     optionals = True
                 elif optionals and not '*' in b:
                     call_error('Optional function arguments must be after all positional arguments.', 'syntax')
-            functions[name] = Function(name, arguments, func)
+            if name in local_vars:
+                call_error('Invalid Function name. Function name must not already be defined.', 'defined')
+            local_vars[name] = Function(name, arguments, func)
         elif a[0] == 'DATATYPE':
             if len(a) < 4 or ':' not in a:
                 call_error('Datatype declaration requires at least a datatype name, initialisation code, and the ":" separator.', 'argerr')
@@ -1139,7 +1159,11 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                 call_error('Invalid Datatype name. Datatype name must not already be defined.', 'defined')
             exec('class ' + name + '(BaseDatatype):pass', globals())
             this = eval(name)
-            actions = {b[1:] : functions[b] for b in functions if b[0] == '!' and b[1:] in mdcl_keywords + ('ECHO',)}
+            actions = {b[1:] : local_vars[b] for b in local_vars
+                if isinstance(b, (Function, BuiltinFunction))
+                and b[0] == '!'
+                and b[1:] in mdcl_keywords + ('ECHO',)
+            }
             if 'ECHO' not in actions:
                 call_error('Datatype is missing an ECHO function.', 'attr')
             for a in actions:
@@ -1153,7 +1177,7 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
             this.__init__ = __init__
             this.__repr__ = __repr__
             datatypes += (this,)
-            functions[name] = Function(name, arguments, this)
+            local_vars[name] = Function(name, arguments, this)
             del this
             del __init__
             del __repr__
@@ -1353,8 +1377,6 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
             key = ''.join(a[:a.index(':')])
             if key in reserved_names:
                 call_error('Invalid variable name. Variable names can not be reserved names.', 'var')
-            if key in functions:
-                call_error('Invalid variable name. A function exists with that name, use DEL to delete functions or variables.', 'var')
             if not re.match('^[a-zA-Z]+$', key) and key:
                 call_error('Invalid variable name, variable names must fit this REGEX expression: ^[a-zA-Z]+$', 'var')
             value = evaluate(a[a.index(':') + 1:], error=code[i], args=localargs)
@@ -1365,11 +1387,9 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                 call_error('DEL statement missing variable or key to delete.', 'argerr')
             key = ''.join(a[1:])
             if key in local_vars:
-                del local_vars[key]
-            elif key in functions:
-                if isinstance(functions[key], BuiltinFunction):
+                if isinstance(local_vars[key], BuiltinFunction):
                     call_error('DEL statement can not delete built-in functions.', 'argerr')
-                del functions[key]
+                del local_vars[key]
             elif key in global_vars:
                 call_error('DEL statement can not delete global arguments.', 'argerr')
         elif a[0] == 'IMPORT':
@@ -1417,7 +1437,6 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                     oldline = current_line
                     old_local_vars = copy(local_vars)
                     old_global_vars = copy(global_vars)
-                    old_functions = copy(functions)
                     run(newcode, f, raw=True)
                     current_file = oldfile
                     current_code = oldcode
@@ -1428,9 +1447,6 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                     for d in old_global_vars:
                         if old_global_vars[d] != global_vars[d]:
                             del global_vars[d]
-                    for d in old_functions:
-                        if old_functions[d] != functions[d]:
-                            del functions[d]
                     break
                 else:
                     call_error('No scripts within directory ' + pformat(b.value) + ' could be unimported.', 'import')
@@ -1549,7 +1565,7 @@ def eval_datatypes(exp, error=None, dostrings=False):
             if re.match('^[a-zA-Z]+\.[a-zA-Z]+$', new[a]):
                 keys = new[a].split('.')
                 last = None
-                if keys[0] not in set(local_vars + global_vars + functions):
+                if keys[0] not in set(local_vars + global_vars):
                     call_error('Namespace ' + pformat(keys[0]) + ' does not exist or has not been imported.', 'namespace')
                 if len(keys) > 2:
                     call_error('Too many namespace calls in one expression.', 'namespace')
@@ -1557,8 +1573,6 @@ def eval_datatypes(exp, error=None, dostrings=False):
                     new[a] = local_vars[keys[0]][keys[1]]
                 elif keys[1] in global_vars[keys[0]]:
                     new[a] = global_vars[keys[0]][keys[1]]
-                elif keys[1] in functions[keys[0]]:
-                    new[a] = keys[1]
         if isinstance(new[a], tuple([b for b in datatypes_switch.keys() if dostrings or b != str])):
             new[a] = datatypes_switch[type(new[a])](new[a])
         if not isinstance(new[a], str):
@@ -1675,6 +1689,9 @@ def make_evaluable(line):
 
 
 def evaluate(exp, error=None, args=None, funcargs=False):
+    global current_file
+    global current_code
+    global current_line
     if not exp:
         return Null()
     reps = {
@@ -1688,7 +1705,8 @@ def evaluate(exp, error=None, args=None, funcargs=False):
         '|': 'INDEX',
     }
     new = [a for a in exp]
-    new = eval_functions(eval_datatypes(new, error=error), error=error, args=args)
+    #new = eval_functions(eval_datatypes(new, error=error), error=error, args=args)
+    new = eval_datatypes(new, error=error)
     a = 0
     while a < len(new):
         if isinstance(new[a], datatypes + (type(None),)) and not (
@@ -1696,6 +1714,18 @@ def evaluate(exp, error=None, args=None, funcargs=False):
         ):
             a += 1
             continue
+        elif new[a].startswith('args[') and new[a].endswith(']'):
+            key = int(new[a][5:-1])
+            if args:
+                if key >= len(args):
+                    call_error('Local argument list index out of range, ' + str(key) + ' > ' + str(len(args) - 1) + '.',
+                        'outofrange', error)
+                new[a] = args[key]
+            else:
+                if key >= len(global_args):
+                    call_error('Global argument list index out of range, ' + str(key) + ' > ' + str(len(global_args) - 1) + '.',
+                        'outofrange', error)
+                new[a] = global_args[key]
         if new[a] in reps:
             new[a] = reps[new[a]]
         if new[a] in mdcl_keywords:
@@ -1727,6 +1757,30 @@ def evaluate(exp, error=None, args=None, funcargs=False):
             # Equivalent to left_hand.right_hand
             # Right hand argument should not be String,
             # it should be a regular word.
+        elif new[a] == '!':
+            if a + 1 >= len(new):
+                call_error('CALL requires a right hand argument.', 'argerr', error)
+            del new[a]
+            try:
+                new[a] = evaluate([new[a]], error=error, args=args)
+                limit = len(new[a].args)
+                f = evaluate(new[a + 1:a + 1 + limit], error=error, args=args, funcargs=True)
+                if not isinstance(f, tuple):
+                    f = f,
+                f = f[:limit]
+                oldfile = current_file
+                oldcode = current_code
+                oldline = current_line
+                current_file = current_file + '\n<' + new[a].name + 'METHOD>'
+                current_code = new[a].code
+                current_line = 1
+                new[a] = new[a].call(f)
+                current_file = oldfile
+                current_code = oldcode
+                current_line = oldline
+                del new[a + 1:a + 1 + limit]
+            except AttributeError:
+                call_error('Type ' + type(new[a]).__name__ + ' is not callable.', 'attr', error)
         elif new[a] == 'AND':
             if a - 1 < 0:
                 call_error('AND requires a left hand argument.', 'argerr', error)
@@ -1887,7 +1941,7 @@ def evaluate(exp, error=None, args=None, funcargs=False):
             new[a] = global_vars[new[a]]
         elif new[a] in reserved_names:
             call_error('Invalid syntactical usage of reserved name.', 'syntax')
-        elif new[a] not in functions:
+        else:
             token = new[a]
             if len(token) > 100:
                 token = token[:97] + '...'
@@ -2057,10 +2111,6 @@ class BFList:
         return Array(local_vars.keys()._value)
 
     @staticmethod
-    def get_functions(args):
-        return Array(list(functions.keys()))
-
-    @staticmethod
     def get_argv(args):
         if isinstance(args[0], Integer):
             if args[0].value < len(global_args):
@@ -2129,6 +2179,7 @@ reserved_names = (
     '=',
     '|',
 
+    'CALL',
     'AND',
     'OR',
     'ONLY',
@@ -2154,7 +2205,6 @@ reserved_names = (
     'WAIT',
     'GLOBALS',
     'LOCALS',
-    'FUNCTIONS',
     'ARGV',
 
     'NOT',
@@ -2214,18 +2264,15 @@ datatypes_switch = {
     list: Array,
     set: Alphabet,
     type(None): Null,
+    types.FunctionType: BuiltinFunction,
 }
 builtin_types = tuple(set(datatypes_switch.values())) + (
     RegexString,
     Slice,
+    Function,
 )
 
-datatypes = copy(builtin_types)
-local_vars = CompactDict()
-global_vars = CompactDict()
-global_args = [String(a) for a in sys.argv[1:]]
-
-functions = {
+local_vars = CompactDict({
     'INTEGER': BuiltinFunction('INTEGER',
         [['@', '*']],
         Integer),
@@ -2281,9 +2328,6 @@ functions = {
     'LOCALS': BuiltinFunction('LOCALS',
         [],
         BFList.get_locals),
-    'FUNCTIONS': BuiltinFunction('FUNCTIONS',
-        [],
-        BFList.get_functions),
     'ARGV': BuiltinFunction('ARGV',
         [[Integer, '*']],
         BFList.get_argv),
@@ -2295,4 +2339,8 @@ functions = {
     'EXIT': BuiltinFunction('EXIT',
         [],
         lambda x: (String(''), sys.exit())[0]),
-}
+})
+
+datatypes = copy(builtin_types)
+global_vars = CompactDict()
+global_args = [String(a) for a in sys.argv[1:]]
