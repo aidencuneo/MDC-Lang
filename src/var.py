@@ -1714,18 +1714,6 @@ def evaluate(exp, error=None, args=None, funcargs=False):
         ):
             a += 1
             continue
-        elif new[a].startswith('args[') and new[a].endswith(']'):
-            key = int(new[a][5:-1])
-            if args:
-                if key >= len(args):
-                    call_error('Local argument list index out of range, ' + str(key) + ' > ' + str(len(args) - 1) + '.',
-                        'outofrange', error)
-                new[a] = args[key]
-            else:
-                if key >= len(global_args):
-                    call_error('Global argument list index out of range, ' + str(key) + ' > ' + str(len(global_args) - 1) + '.',
-                        'outofrange', error)
-                new[a] = global_args[key]
         if new[a] in reps:
             new[a] = reps[new[a]]
         if new[a] in mdcl_keywords:
@@ -1750,6 +1738,18 @@ def evaluate(exp, error=None, args=None, funcargs=False):
                 new[a] = settype(vals[0] if isinstance(vals, tuple) else vals)
                 del new[a - 1]
                 a -= 1
+        elif new[a].startswith('args[') and new[a].endswith(']'):
+            key = int(new[a][5:-1])
+            if args:
+                if key >= len(args):
+                    call_error('Local argument list index out of range, ' + str(key) + ' > ' + str(len(args) - 1) + '.',
+                        'outofrange', error)
+                new[a] = args[key]
+            else:
+                if key >= len(global_args):
+                    call_error('Global argument list index out of range, ' + str(key) + ' > ' + str(len(global_args) - 1) + '.',
+                        'outofrange', error)
+                new[a] = global_args[key]
         elif new[a] == '.':
             pass
             # Perform gettattr.
