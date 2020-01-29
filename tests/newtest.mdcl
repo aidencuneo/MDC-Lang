@@ -1,2 +1,28 @@
-!ECHO 'hey';
-ECHO;
+NEW !SLICE
+: MySliceable
+: Slice
+: {
+    YIELD $0.value $1;
+};
+
+NEW !ECHO
+: MySliceable
+: {
+    YIELD $0.value;
+};
+
+DATATYPE MySliceable
+: Array String
+: {
+    YIELD $0 < !TYPE $0 = 'Array' > [ ARRAY $0 ];
+};
+
+flip : (::-1);
+sliceable : !MySliceable [ 1 TO 6 ];
+
+!ECHO sliceable flip;
+
+mystring : 'ThIS iS my StRIng.';
+noncase  : !mystring;
+
+!ECHO [ mystring noncase ] "\n";

@@ -6,7 +6,7 @@ First Commit was at: 1/1/2020.
 '''
 
 _debug_mode = True
-__version__ = '1.4.2'
+__version__ = '1.4.3'
 
 import ast
 import datetime
@@ -37,6 +37,7 @@ class SignalCatches:
     def __init__(self):
         self.switches = {
             'INT': True,
+            'TSTP': True,
             'SEGV': True,
         }
         signal.signal(signal.SIGINT, self.keyboard_interrupt)
@@ -56,6 +57,10 @@ class SignalCatches:
         if self.switches['INT']:
             call_error(error_type='keyboardinterrupt')
 
+    def eof_error(self, signal=None, frame=None):
+        if self.switches['TSTP']:
+            call_error(error_type='eoferror')
+
     def segmentation_fault(self, signal=None, frame=None):
         if self.switches['SEGV']:
             call_error('Segmentation Fault.', 'fatal')
@@ -68,6 +73,15 @@ class Function:
             self.name = name.name
             self.args = name.args
             self.code = name.code
+        elif isinstance(name, str) and args is None and code is None:
+            if name in local_vars:
+                name = local_vars[name]
+                self.name = name.name
+                self.args = name.args
+                self.code = name.code
+            else:
+                call_error('Function can not be declared with only a str argument, '
+                    'arguments and code are required. This is a Python error.', 'fatal')
         else:
             if args is None or code is None:
                 call_error('Function can not be declared without second or third arguments '
@@ -82,11 +96,8 @@ class Function:
         self.value = '<Function ' + str(self.name) + '>'
 
     def __repr__(self):
-        this = Debug.find_value(self)
-        if this:
-            this = 'local_vars[' + pformat(this) + ']'
-            return this
-        return 'Function(' + pformat(self.name) + ', ' + pformat(self.args) + ', ' + pformat(self.code) + ')'
+        return pformat(self.name)
+        return pformat(self.name) + ', ' + pformat(self.args) + ', ' + pformat(self.code)
 
     def __str__(self):
         return self.value
@@ -109,7 +120,7 @@ class Function:
                 'maximum amount for this Function is ' + str(len(self.args)) + '.', 'argerr')
         return args
 
-    def call(self, args, ex_args=None):
+    def CALL(self, args, ex_args=None):
         if isinstance(args, Array):
             args = args.value
         args = self.check_args(args)
@@ -126,7 +137,7 @@ class Function:
 
 class BuiltinFunction(Function):
 
-    def call(self, args, ex_args=None):
+    def CALL(self, args, ex_args=None):
         if isinstance(args, Array):
             args = args.value
         args = self.check_args(args)
@@ -170,7 +181,7 @@ class BaseDatatype:
         else:
             raise AttributeError
         if isinstance(f, (Function, BuiltinFunction)):
-            value = f.call((self,) + args)
+            value = f.CALL((self,) + args)
             return value, type(value)
         return f(*args)
 
@@ -430,6 +441,9 @@ class String(BaseDatatype):
     def __str__(self):
         return self.value
 
+    def CALL(self):
+        return self.value.lower(), String
+
     def ADD(self, other):
         mdc_assert(self, other, datatypes, 'ADD')
         if isinstance(other, (Integer, Float)):
@@ -664,6 +678,8 @@ class Slice(BaseDatatype):
                 return Alphabet(newval)
         if not 'SLICE' in dir(obj):
             call_error('Datatype ' + type(obj).__name__ + ' does not have a method to deal with SLICE.', 'attr')
+        if isinstance(obj.SLICE, (Function, BuiltinFunction)):
+            return obj.SLICE.CALL((obj, self,))
         return obj.SLICE(self)
 
 
@@ -699,6 +715,9 @@ class Boolean(BaseDatatype):
 
     def __bool__(self):
         return bool(self.value)
+
+    def CALL(self):
+        return not self.value, Boolean
 
 
 class Array(BaseDatatype):
@@ -1160,7 +1179,7 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
             exec('class ' + name + '(BaseDatatype):pass', globals())
             this = eval(name)
             actions = {b[1:] : local_vars[b] for b in local_vars
-                if isinstance(b, (Function, BuiltinFunction))
+                if isinstance(local_vars[b], (Function, BuiltinFunction))
                 and b[0] == '!'
                 and b[1:] in mdcl_keywords + ('ECHO',)
             }
@@ -1173,7 +1192,7 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                     args = args,
                 self.value = evaluate([func], args=args)
             def __repr__(self):
-                return pformat(evaluate([actions['ECHO'], self]))
+                return pformat(evaluate(['!', actions['ECHO'], self]))
             this.__init__ = __init__
             this.__repr__ = __repr__
             datatypes += (this,)
@@ -1601,67 +1620,6 @@ def eval_datatypes(exp, error=None, dostrings=False):
     return new
 
 
-def eval_functions(exp, error=None, args=None):
-    global current_file
-    global current_code
-    global current_line
-    if not exp:
-        return exp
-    new = [a for a in exp]
-    a = 0
-    while a < len(new):
-        if isinstance(new[a], (Function, BuiltinFunction)):
-            limit = len(new[a].args)
-            f = evaluate(new[a + 1:a + 1 + limit], error=error, args=args, funcargs=True)
-            if not isinstance(f, tuple):
-                f = f,
-            f = f[:limit]
-            oldfile = current_file
-            oldcode = current_code
-            oldline = current_line
-            current_file = current_file + '\n<' + new[a].name + 'METHOD>'
-            current_code = new[a].code
-            current_line = 1
-            new[a] = new[a].call(f)
-            current_file = oldfile
-            current_code = oldcode
-            current_line = oldline
-            del new[a + 1:a + 1 + limit]
-        if isinstance(new[a], datatypes):
-            pass
-        elif new[a].startswith('args[') and new[a].endswith(']'):
-            key = int(new[a][5:-1])
-            if args:
-                if key >= len(args):
-                    call_error('Local argument list index out of range, ' + str(key) + ' > ' + str(len(args) - 1) + '.',
-                        'outofrange', error)
-                new[a] = args[key]
-            else:
-                if key >= len(global_args):
-                    call_error('Global argument list index out of range, ' + str(key) + ' > ' + str(len(global_args) - 1) + '.',
-                        'outofrange', error)
-                new[a] = global_args[key]
-        elif new[a] in functions:
-            limit = len(functions[new[a]].args)
-            f = evaluate(new[a + 1:a + 1 + limit], error=error, args=args, funcargs=True)
-            if not isinstance(f, tuple):
-                f = f,
-            f = f[:limit]
-            oldfile = current_file
-            oldcode = current_code
-            oldline = current_line
-            current_file = current_file + '\n<' + new[a] + 'METHOD>'
-            current_code = functions[new[a]].code
-            current_line = 1
-            new[a] = functions[new[a]].call(f)
-            current_file = oldfile
-            current_code = oldcode
-            current_line = oldline
-            del new[a + 1:a + 1 + limit]
-        a += 1
-    return new
-
-
 def evaluate_line(oldline, start, end=None, error=None, args=None):
     if end is None:
         end = len(oldline)
@@ -1723,7 +1681,7 @@ def evaluate(exp, error=None, args=None, funcargs=False):
                 call_error('Missing second argument for ' + new[a] + ' method.', 'syntax', error)
             try:
                 vals = new[a - 1].do_action(new[a], (evaluate([new[a + 1]], error=error, args=args),))
-                settype = vals[1] if isinstance(vals, tuple) else type(new[a - 1])
+                settype = vals[1] if isinstance(vals, tuple) else type(vals)
                 new[a] = settype(vals[0] if isinstance(vals, tuple) else vals)
                 del new[a + 1]
                 del new[a - 1]
@@ -1734,7 +1692,7 @@ def evaluate(exp, error=None, args=None, funcargs=False):
         elif isinstance(new[a], Slice):
             if a - 1 >= 0:
                 vals = new[a].do_slice(new[a - 1])
-                settype = vals[1] if isinstance(vals, tuple) else type(new[a - 1])
+                settype = vals[1] if isinstance(vals, tuple) else type(vals)
                 new[a] = settype(vals[0] if isinstance(vals, tuple) else vals)
                 del new[a - 1]
                 a -= 1
@@ -1751,36 +1709,52 @@ def evaluate(exp, error=None, args=None, funcargs=False):
                         'outofrange', error)
                 new[a] = global_args[key]
         elif new[a] == '.':
-            pass
-            # Perform gettattr.
-            # Get right hand argument from left hand argument.
-            # Equivalent to left_hand.right_hand
-            # Right hand argument should not be String,
-            # it should be a regular word.
+            new[a - 1] = evaluate([new[a - 1]], args=args, error=error)
+            if a - 1 < 0:
+                call_error('Cannot get attribute from NULL. (Missing value before `.`)', 'argerr', error)
+            if a + 1 >= len(new):
+                call_error('Missing argument to retrieve from "' + new[a - 1] + '".', 'argerr', error)
+            try:
+                if isinstance(new[a - 1], (Function, BuiltinFunction)) and new[a + 1] not in (
+                    'name', 'args', 'value'
+                ):
+                    raise AttributeError
+                new[a - 1] = translate_datatypes(getattr(new[a - 1], new[a + 1]))
+            except AttributeError:
+                call_error('Variable ' + str(exp[a - 1]) + ' does not have attribute ' + pformat(new[a + 1]) + '.', 'attr', error)
+            del new[a]
+            del new[a]
+            a -= 1
         elif new[a] == '!':
             if a + 1 >= len(new):
                 call_error('CALL requires a right hand argument.', 'argerr', error)
             del new[a]
-            try:
-                new[a] = evaluate([new[a]], error=error, args=args)
-                limit = len(new[a].args)
-                f = evaluate(new[a + 1:a + 1 + limit], error=error, args=args, funcargs=True)
-                if not isinstance(f, tuple):
-                    f = f,
-                f = f[:limit]
-                oldfile = current_file
-                oldcode = current_code
-                oldline = current_line
-                current_file = current_file + '\n<' + new[a].name + 'METHOD>'
-                current_code = new[a].code
-                current_line = 1
-                new[a] = new[a].call(f)
-                current_file = oldfile
-                current_code = oldcode
-                current_line = oldline
-                del new[a + 1:a + 1 + limit]
-            except AttributeError:
+            new[a] = evaluate([new[a]], error=error, args=args)
+            thishas = dir(new[a])
+            if 'CALL' not in thishas:
                 call_error('Type ' + type(new[a]).__name__ + ' is not callable.', 'attr', error)
+            if 'args' not in thishas or 'code' not in thishas:
+                vals = new[a].CALL()
+                settype = vals[1] if isinstance(vals, tuple) else type(vals)
+                new[a] = settype(vals[0] if isinstance(vals, tuple) else vals)
+                a -= 1
+                continue
+            limit = len(new[a].args)
+            f = evaluate(new[a + 1:a + 1 + limit], error=error, args=args, funcargs=True)
+            if not isinstance(f, tuple):
+                f = f,
+            f = f[:limit]
+            oldfile = current_file
+            oldcode = current_code
+            oldline = current_line
+            current_file = current_file + '\n<' + new[a].name + 'METHOD>'
+            current_code = new[a].code
+            current_line = 1
+            new[a] = new[a].CALL(f)
+            current_file = oldfile
+            current_code = oldcode
+            current_line = oldline
+            del new[a + 1:a + 1 + limit]
         elif new[a] == 'AND':
             if a - 1 < 0:
                 call_error('AND requires a left hand argument.', 'argerr', error)
@@ -1937,8 +1911,10 @@ def evaluate(exp, error=None, args=None, funcargs=False):
                 del new[a + 1]
         elif new[a] in local_vars:
             new[a] = local_vars[new[a]]
+            a -= 1
         elif new[a] in global_vars:
             new[a] = global_vars[new[a]]
+            a -= 1
         elif new[a] in reserved_names:
             call_error('Invalid syntactical usage of reserved name.', 'syntax')
         else:
@@ -2226,6 +2202,7 @@ mdcl_keywords = (
     'GE',
     'INDEX',
     'HAS',
+    'SLICE',
 )
 
 start_error_tags = error_tags = CompactDict({
@@ -2241,6 +2218,7 @@ start_error_tags = error_tags = CompactDict({
     'type': 'TYPE ERROR',
     'value': 'VALUE ERROR',
     'keyboardinterrupt': 'KEYBOARD INTERRUPT',
+    'eoferror': 'END OF FILE ERROR',
     'unknownvalue': 'UNKNOWN VALUE',
     'filenotfound': 'FILE NOT FOUND ERROR',
     'dirnotfound': 'DIRECTORY NOT FOUND ERROR',

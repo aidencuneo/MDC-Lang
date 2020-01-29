@@ -169,9 +169,6 @@ def tokenise(line):
             elif isnum(pair[0]) and pair[1][0] == '.' and isnum(pair[1][1:]):
                 del k[-1]
                 k.append(pair[0] + pair[1])
-            elif isword(pair[0]) and pair[1][0] == '.' and isword(pair[1][1:]):
-                del k[-1]
-                k.append(pair[0] + pair[1])
             else:
                 k.append(a)
             del pair[0]
