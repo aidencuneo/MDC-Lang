@@ -1,28 +1,16 @@
-NEW !SLICE
-: MySliceable
-: Slice
-: {
-    YIELD $0.value $1;
-};
-
 NEW !ECHO
-: MySliceable
+: Empty
 : {
     YIELD $0.value;
 };
 
-DATATYPE MySliceable
-: Array String
+DATATYPE Empty
+: Null *
 : {
-    YIELD $0 < !TYPE $0 = 'Array' > [ ARRAY $0 ];
+    YIELD NULL;
 };
 
-flip : (::-1);
-sliceable : !MySliceable [ 1 TO 6 ];
-
-!ECHO sliceable flip;
-
-mystring : 'ThIS iS my StRIng.';
-noncase  : !mystring;
-
-!ECHO [ mystring noncase ] "\n";
+a : !Empty;
+a.store : 10;
+a.store.value : 100;
+!ECHO a.store;
