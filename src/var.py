@@ -6,7 +6,7 @@ First Commit was at: 1/1/2020.
 '''
 
 _debug_mode = True
-__version__ = '1.5.0'
+__version__ = '1.5.2'
 
 import ast
 import datetime
@@ -21,7 +21,7 @@ import time
 import traceback as tb
 import types
 
-from copy import copy
+from copy import copy, deepcopy
 from functools import partial
 from pprint import pformat
 
@@ -140,8 +140,7 @@ class Function(BaseDatatype):
         super().__init__(self.value)
 
     def __repr__(self):
-        return pformat(self.name)
-        return pformat(self.name) + ', ' + pformat(self.args) + ', ' + pformat(self.code)
+        return self.value
 
     def __str__(self):
         return self.value
@@ -180,6 +179,12 @@ class Function(BaseDatatype):
 
 
 class BuiltinFunction(Function):
+
+    def __init__(self, name, args=None, code=None, memtag=None):
+        super().__init__(name, args, code)
+        if memtag is not None:
+            self.memtag = memtag
+        self.value = '<BuiltinFunction ' + str(self.name) + '>'
 
     def CALL(self, args, ex_args=None):
         if isinstance(args, Array):
@@ -718,10 +723,10 @@ class Boolean(BaseDatatype):
         super().__init__(self.value)
 
     def __repr__(self):
-        return self.value.__repr__()
+        return 'TRUE' if self.value else 'FALSE'
 
     def __str__(self):
-        return self.__repr__().upper()
+        return repr(self)
 
     def __bool__(self):
         return bool(self.value)
@@ -803,10 +808,10 @@ class Null(BaseDatatype):
         super().__init__(self.value)
 
     def __repr__(self):
-        return pformat('NULL')
+        return 'NULL'
 
     def __str__(self):
-        return 'NULL'
+        return repr(self)
 
     def __bool__(self):
         return False
@@ -1057,9 +1062,6 @@ def pydata_to_mdcldata(pydata):
 
 
 def assign_to_memory(value):
-    in_memory = find_in_memory(value)
-    if in_memory:
-        return in_memory
     memtag = 0
     while memtag in tuple(memory.keys()) or not memtag:
         memtag = random.randint(1, 10000000)
@@ -1068,17 +1070,26 @@ def assign_to_memory(value):
     return memtag
 
 
-def find_in_memory(value):
-    if isinstance(value, datatypes):
-        for a in memory:
-            if isinstance(memory[a], datatypes):
-                if memory[a].value == value.value:
-                    return a
-    else:
-        for a in memory:
-            if not isinstance(memory[a], datatypes):
-                if memory[a] == value:
-                    return a
+def remove_from_memory(value, is_local=True, is_global=False):
+    if not value:
+        return
+    memtag = value.memtag
+    if is_local:
+        del memory[local_vars[memtag]]
+        del local_vars[memtag]
+    if is_global:
+        del memory[global_vars[memtag]]
+        del global_vars[memtag]
+
+
+def clean_memory():
+    global memory
+    valids = tuple(local_vars.values()) + tuple(global_vars.values())
+    newmemory = {}
+    for a in memory:
+        if a in valids:
+            newmemory[a] = memory[a]
+    memory = deepcopy(newmemory)
 
 
 def start(rawcode, filename=None):
@@ -1096,7 +1107,16 @@ def start(rawcode, filename=None):
         call_error(error_type='fatal')
 
 
-def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=False, yielding=False, localargs=None):
+def run(
+    rawcode,
+    filename=None,
+    tokenised=False,
+    oneline=False,
+    echo=True,
+    raw=False,
+    yielding=False,
+    localargs=None,
+):
     global current_file
     global current_code
     global current_line
@@ -1120,7 +1140,7 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
     i = 0
     while i < len(code):
         current_line += lines[i].count('\n')
-        global_vars['LINE'] = Integer(current_line)
+        global_vars['LINE'] = assign_to_memory(Integer(current_line))
         if not code[i].strip():
             i += 1
             continue
@@ -1195,7 +1215,7 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                     'value': assign_to_memory(self.value) if isinstance(self.value, datatypes) else self.value,
                 })
             def __repr__(self):
-                return pformat(evaluate(['!', actions['ECHO'], self]))
+                return pformat(evaluate(['!', actions['ECHO'], self], pop=True))
             this.__init__ = __init__
             this.__repr__ = __repr__
             datatypes += (this,)
@@ -1243,7 +1263,7 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                 e = False
                 if conditions[b] == 'ELSE':
                     e = True
-                elif Boolean(evaluate(conditions[b], error=code[i], args=localargs)):
+                elif bool(evaluate(conditions[b], error=code[i], args=localargs, pop=True)):
                     e = True
                 if e:
                     ev = evaluate(runcodes[b], error=code[i], args=localargs)
@@ -1263,7 +1283,7 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                 call_error('WHILE loop requires at least a condition, the ":" separator, and code to run.', 'syntax')
             condition = contents[0]
             runcode = contents[1]
-            while Boolean(evaluate(condition, error=code[i], args=localargs)):
+            while bool(evaluate(condition, error=code[i], args=localargs, pop=True)):
                 ev = evaluate(runcode, error=code[i], args=localargs)
                 if not isinstance(ev, Null):
                     if yielding:
@@ -1304,10 +1324,11 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
             if variable in local_vars:
                 oldvariable = local_vars[variable]
             for value in translate_datatypes(iterable).value:
+                val = assign_to_memory(value)
                 if variable is not None:
-                    local_vars[variable] = value
-                global_vars[','] = value
-                ev = evaluate(runcode, error=code[i], args=localargs)
+                    local_vars[variable] = val
+                local_vars[','] = val
+                ev = evaluate(runcode, error=code[i], args=localargs, pop=True)
                 if not isinstance(ev, Null):
                     if yielding:
                         yielded += [ev]
@@ -1316,7 +1337,7 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                         if echo:
                             sys.stdout.write(str(ev))
             if oldvariable is not None:
-                local_vars[variable] = oldvariable
+                local_vars[variable] = assign_to_memory(oldvariable)
         elif a[0] == 'TRY':
             if len(a) < 3 or ':' not in a:
                 call_error('TRY statement requires at least the ":" separator and code to run.', 'syntax')
@@ -1332,7 +1353,7 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                 else:
                     if not keys:
                         call_error('TRY statement requires CATCH keyword before second set of code to run.', 'syntax')
-                    keys = evaluate(keys, error=code[i], args=localargs)
+                    keys = evaluate(keys, error=code[i], args=localargs, pop=True)
                     if isinstance(keys, Array):
                         keys = keys.value
                     if not isinstance(keys, (tuple, list)):
@@ -1347,7 +1368,7 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
             oldcatch = current_catch
             current_catch = catches
             try:
-                ev = evaluate(runcode, error=code[i], args=localargs)
+                ev = evaluate(runcode, error=code[i], args=localargs, pop=True)
                 if not isinstance(ev, Null):
                     if yielding:
                         yielded += [ev]
@@ -1410,7 +1431,7 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                     if k + 1 >= len(key):
                         call_error('Missing attribute to set inside parent "' + key[k - 1] + '".', 'argerr')
                     old = key[k]
-                    key[k] = evaluate([key[k]], error=code[i], args=localargs)
+                    key[k] = evaluate([key[k]], error=code[i], args=localargs, pop=True)
                     try:
                         key[k] = memory[key[k].data[key[k + 1]]]
                     except KeyError:
@@ -1420,8 +1441,10 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                     k -= 1
                 k += 1
             value = evaluate(a[a.index(':') + 1:], args=localargs, error=code[i])
+            if value.memtag not in memory:
+                call_error('Memory tag ' + pformat(value.memtag) + ' not found in memory.', 'memory')
             if key[2:] or not key:
-                call_error('Invalid settatr syntax.', 'syntax')
+                call_error('Invalid setattr syntax.', 'syntax')
             if key[1:]:
                 key[0] = local_vars[key[0]] if isinstance(key[0], str) else key[0].memtag
                 memory[key[0]].data[key[1]] = value.memtag
@@ -1440,7 +1463,7 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
         elif a[0] == 'IMPORT':
             if len(a) < 2:
                 call_error('IMPORT statement requires at least one argument.', 'argerr')
-            fnames = evaluate(a[1:], error=code[i], args=localargs, funcargs=True)
+            fnames = evaluate(a[1:], error=code[i], args=localargs, funcargs=True, pop=True)
             if any(not isinstance(f, String) for f in fnames):
                 call_error('IMPORT statement arguments must be of type String.', 'type')
             for fname in fnames:
@@ -1575,7 +1598,7 @@ def translate_datatypes(dt, dotuple=True, error_on_fail=True):
         dt = Function(dt.__name__, [], dt)
     if isinstance(dt, Array):
         contents = tuple(translate_datatypes(a) for a in dt.value)
-        dt = type(dt)(contents)
+        dt = Array(contents)
     if isinstance(dt, datatypes + (Function,)):
         return dt
     if not (isinstance(dt, tuple) and not dotuple) and error_on_fail:
@@ -1643,28 +1666,16 @@ def evaluate_line(oldline, start, end=None, error=None, args=None):
     return oldline
 
 
-def make_evaluable(line):
+def make_evaluable(line, newinst=False):
     if not isinstance(line, (list, tuple)):
         line = line,
-    return [
-        'memory[' + pformat(
-            a if isinstance(a, str) else a.memtag
-        ) + ']'
-        for a in line
-    ]
-    return [
-        (type(a).__name__ + '(' + (
-            make_evaluable(a.value)[0]
-            if isinstance(a.value, datatypes)
-            else pformat(a)
-        ) + ')')
-        if isinstance(a, datatypes)
-        else a for a in line
-        if a is not None
-    ]
+    line = [a for a in line if a is not None]
+    if newinst:
+        line = [assign_to_memory(a) for a in line]
+    return [a if isinstance(a, str) else a.memtag for a in line]
 
 
-def evaluate(exp, error=None, args=None, funcargs=False, pop=False):
+def evaluate(exp, error=None, args=None, funcargs=False, pop=False, newinst=False, clean_run=False):
     global current_file
     global current_code
     global current_line
@@ -1684,7 +1695,7 @@ def evaluate(exp, error=None, args=None, funcargs=False, pop=False):
     new = eval_datatypes(new, error=error)
     a = 0
     while a < len(new):
-        if isinstance(new[a], datatypes + (type(None),)) and not (
+        if isinstance(new[a], datatypes) and not (
             isinstance(new[a], Slice)
         ):
             a += 1
@@ -1719,10 +1730,16 @@ def evaluate(exp, error=None, args=None, funcargs=False, pop=False):
                 if key >= len(args):
                     new[a] = Null()
                 new[a] = args[key]
+                if new[a] not in memory:
+                    call_error('Memory tag ' + pformat(new[a]) + ' not found in memory.', 'memory', error)
+                new[a] = memory[new[a]]
             else:
                 if key >= len(global_args):
                     new[a] = Null()
                 new[a] = global_args[key]
+                if new[a] not in memory:
+                    call_error('Memory tag ' + pformat(new[a]) + ' not found in memory.', 'memory', error)
+                new[a] = memory[new[a]]
         elif new[a] == '.':
             if a - 1 < 0:
                 call_error('Cannot get attribute from NULL. (Missing value before `.`)', 'argerr', error)
@@ -1733,7 +1750,8 @@ def evaluate(exp, error=None, args=None, funcargs=False, pop=False):
                 old = new[a - 1]
                 new[a - 1] = new[a - 1].data[new[a + 1]]
             except KeyError:
-                call_error('Variable ' + pformat(exp[a - 1]) + ' does not have attribute ' + pformat(new[a + 1]) + '.', 'attr', error)
+                call_error('Variable ' + pformat(exp[a - 1]) + ' does not have attribute ' + pformat(new[a + 1]) + '.',
+                    'attr', error)
             del new[a]
             del new[a]
             a -= 1
@@ -1741,7 +1759,7 @@ def evaluate(exp, error=None, args=None, funcargs=False, pop=False):
             if a + 1 >= len(new):
                 call_error('CALL requires a right hand argument.', 'argerr', error)
             del new[a]
-            new[a] = evaluate([new[a]], error=error, args=args)
+            new[a] = evaluate([new[a]], error=error, args=args, pop=True)
             thishas = dir(new[a])
             if 'CALL' not in thishas:
                 call_error('Type ' + type(new[a]).__name__ + ' is not callable.', 'attr', error)
@@ -1752,7 +1770,7 @@ def evaluate(exp, error=None, args=None, funcargs=False, pop=False):
                 a -= 1
                 continue
             limit = len(new[a].args)
-            f = evaluate(new[a + 1:a + 1 + limit], error=error, args=args, funcargs=True)
+            f = evaluate(new[a + 1:], error=error, args=args, funcargs=True)
             if not isinstance(f, tuple):
                 f = f,
             f = f[:limit]
@@ -1766,7 +1784,7 @@ def evaluate(exp, error=None, args=None, funcargs=False, pop=False):
             current_file = oldfile
             current_code = oldcode
             current_line = oldline
-            del new[a + 1:a + 1 + limit]
+            del new[a + 1:]
         elif new[a] == 'AND':
             if a - 1 < 0:
                 call_error('AND requires a left hand argument.', 'argerr', error)
@@ -1877,10 +1895,10 @@ def evaluate(exp, error=None, args=None, funcargs=False, pop=False):
                 call_error('Shorthand condition requires a left hand argument.', 'argerr', error)
             if a + 1 >= len(new):
                 call_error('Shorthand condition requires a right hand argument.', 'argerr', error)
-            condition = evaluate(replacekeys(loader.tokenise(new[a][1:-1].strip()), args=args), error=error, args=args)
+            condition = evaluate(replacekeys(loader.tokenise(new[a][1:-1].strip()), args=args), error=error, args=args, pop=True)
             r = replacekeys(loader.tokenise(new[a][1:-1].strip()), args=args)
-            left = evaluate(replacekeys([new[a - 1]], args=args), error=error, args=args)
-            right = evaluate(replacekeys([new[a + 1]], args=args), error=error, args=args)
+            left = evaluate(replacekeys([new[a - 1]], args=args), error=error, args=args, pop=True)
+            right = evaluate(replacekeys([new[a + 1]], args=args), error=error, args=args, pop=True)
             del new[a + 1]
             del new[a - 1]
             a -= 1
@@ -1890,7 +1908,13 @@ def evaluate(exp, error=None, args=None, funcargs=False, pop=False):
                 call_error('Unmatched ' + pformat('}') + '.', 'syntax')
             if not new[a].endswith('}'):
                 call_error('Unmatched ' + pformat('{') + '.', 'syntax')
-            value = run(new[a].strip()[1:-1].strip(), filename='keep', echo=True, raw=True, yielding=True, localargs=args)
+            value = run(
+                new[a].strip()[1:-1].strip(),
+                filename='keep',
+                echo=True,
+                raw=True,
+                yielding=True,
+                localargs=args)
             new[a] = Array(value)
             if not value:
                 new[a] = Null()
@@ -1916,42 +1940,47 @@ def evaluate(exp, error=None, args=None, funcargs=False, pop=False):
             new[a] = local_vars[new[a]]
             if new[a] not in memory:
                 call_error('Memory tag ' + pformat(new[a]) + ' not found in memory.', 'memory', error)
+            new[a] = memory[new[a]]
         elif new[a] in global_vars:
             new[a] = global_vars[new[a]]
             if new[a] not in memory:
                 call_error('Memory tag ' + pformat(new[a]) + ' not found in memory.', 'memory', error)
+            new[a] = memory[new[a]]
         elif new[a] in reserved_names:
             call_error('Invalid syntactical usage of reserved name.', 'syntax')
-        elif not re.match('^0x[A-Fa-f0-9]+$', new[a]):
+        elif re.match('^0x[A-Fa-f0-9]+$', new[a]):
+            new[a] = memory[new[a]]
+            a -= 1
+        else:
             token = new[a]
             if len(token) > 100:
                 token = token[:97] + '...'
-            call_error('Undefined Token: ' + pformat(token), 'syntax', error)
+            call_error('Undefined Token: ' + pformat(token), 'undefined', error)
         a += 1
-    code = ','.join(make_evaluable(new))
+    evaluable = make_evaluable(new, newinst)
+    code = ','.join(['memory[' + pformat(a) + ']' for a in evaluable])
     out = code
     if code and code != ',':
         try:
-            out = eval(code)
-            if pop:
-                for a in new:
-                    del memory[a.memtag]
+            out = eval(code, {'memory': memory})
             out = translate_datatypes(out, dotuple=not funcargs)
             if funcargs and not isinstance(out, tuple):
                 out = out,
             return out
         except Exception as e:
+            raise e
             print(exp)
             print(new)
             print(code)
             print(memory)
+            print(local_vars)
             call_error(str(e), 'exp', error)
     return out
 
 
 def replacekeys(line, args=None):
     for a in range(len(line)):
-        if isinstance(line[a], builtin_types):
+        if isinstance(line[a], datatypes):
             pass
         elif line[a].startswith('$'):
             b = line[a][1]
@@ -2237,6 +2266,7 @@ start_error_tags = error_tags = CompactDict({
     'readonly': 'READONLY VALUE',
     'fatal': 'FATAL ERROR',
     'defined': 'ALREADY DEFINED VALUE',
+    'undefined': 'UNDEFINED',
     'memory': 'MEMORY ERROR',
 })
 
@@ -2263,66 +2293,91 @@ memory = {} # INIT - KEEP THIS
 memory = CompactDict({
     hex(10): BuiltinFunction('INTEGER',
         [['@', '*']],
-        Integer),
+        Integer,
+        hex(10)),
     hex(11): BuiltinFunction('FLOAT',
         [['@', '*']],
-        Float),
+        Float,
+        hex(11)),
     hex(12): BuiltinFunction('STRING',
         [['@', '*']],
-        String),
+        String,
+        hex(12)),
     hex(13): BuiltinFunction('REGEX',
         [[String, '*']],
-        RegexString),
+        RegexString,
+        hex(13)),
     hex(14): BuiltinFunction('TIMEDELTA',
         [['@', '*']],
-        Timedelta),
+        Timedelta,
+        hex(14)),
     hex(15): BuiltinFunction('DATE',
         [['@', '*']],
-        Date),
+        Date,
+        hex(15)),
     hex(16): BuiltinFunction('SLICE',
         [['@', '*']],
-        Slice),
+        Slice,
+        hex(16)),
     hex(17): BuiltinFunction('BOOLEAN',
         [['@', '*']],
-        Boolean),
+        Boolean,
+        hex(17)),
     hex(18): BuiltinFunction('NULL',
         [],
-        Null),
+        Null,
+        hex(18)),
 
     hex(20): BuiltinFunction('READ',
         [[String, '*']],
-        BFList.read),
+        BFList.read,
+        hex(20)),
     hex(21): BuiltinFunction('LEN',
         [[String, Array]],
-        BFList.get_length),
+        BFList.get_length,
+        hex(21)),
     hex(22): BuiltinFunction('READFILE',
         [[String]],
-        BFList.readfile),
+        BFList.readfile,
+        hex(22)),
     hex(23): BuiltinFunction('WRITEFILE',
         [[String], [String]],
-        BFList.writefile),
+        BFList.writefile,
+        hex(23)),
     hex(24): BuiltinFunction('TYPE',
         [['@']],
-        BFList.get_type),
+        BFList.get_type,
+        hex(24)),
     hex(25): BuiltinFunction('ECHO',
         [['@'], ['*', String], ['*', String]],
-        BFList.echo),
+        BFList.echo,
+        hex(25)),
     hex(26): BuiltinFunction('WAIT',
         [[Integer, Float]],
-        BFList.wait),
+        BFList.wait,
+        hex(26)),
 
     hex(30): BuiltinFunction('GLOBALS',
         [],
-        BFList.get_globals),
+        BFList.get_globals,
+        hex(30)),
     hex(31): BuiltinFunction('LOCALS',
         [],
-        BFList.get_locals),
+        BFList.get_locals,
+        hex(31)),
     hex(32): BuiltinFunction('ARGV',
         [[Integer, '*']],
-        BFList.get_argv),
+        BFList.get_argv,
+        hex(32)),
     hex(33): BuiltinFunction('EXIT',
         [],
-        lambda x: (String(''), sys.exit())[0]),
+        lambda x: (String(''), sys.exit())[0],
+        hex(33)),
+
+    hex(40): BuiltinFunction('CLEAN',
+        [],
+        lambda x: clean_memory(),
+        hex(40)),
 })
 
 local_vars = CompactDict({
@@ -2348,6 +2403,8 @@ local_vars = CompactDict({
     'LOCALS': hex(31),
     'ARGV': hex(32),
     'EXIT': hex(33),
+
+    'CLEAN': hex(40),
 })
 
 global_vars = CompactDict()

@@ -1,0 +1,44 @@
+NEW join
+: Array
+: String *
+: {
+    FC : '';
+    FOR i : $0 : {
+        FC : FC + i;
+        IF $1 : {
+            FC : FC + $1;
+        };
+    };
+    IF $1 : {
+        FC : FC - [ LEN $1 ];
+    };
+    YIELD FC;
+};
+
+NEW find
+: String
+: String
+: {
+    YIELD `${0}.value.index(${1}.value)` < $0 HAS $1 > NULL;
+};
+
+NEW strepl
+: String
+: String
+: String
+: {
+    YIELD JOIN [ SPLIT $0 $1 ] $2;
+};
+
+NEW asSet
+: Array
+: {
+    new : ARRAY;
+    FOR $0 : {
+        IF ! [ new HAS , ] : {
+            new : new + ,;
+        };
+    };
+    YIELD new;
+    DEL new;
+};

@@ -1,16 +1,21 @@
-NEW !ECHO
-: Empty
+NEW fib
+: Integer
 : {
-    YIELD $0.value;
+    a : 0;
+    b : 1;
+    IF$0LT1:{YIELD0}:ELSE:{
+        FOR2TO$0:{
+            c : a + b;
+            a : b;
+            b : c;
+        };
+        YIELD b;
+    };
 };
 
-DATATYPE Empty
-: Null *
-: {
-    YIELD NULL;
+fibs : ARRAY;
+FOR i : 2 TO 7 : {
+    fibs:fibs+[!fib i];
 };
-
-a : !Empty;
-a.store : 10;
-a.store.value : 100;
-!ECHO a.store;
+!CLEAN;
+!ECHO fibs;
