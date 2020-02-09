@@ -1,5 +1,0 @@
-NEW CLI
-: String
-: {
-    YIELD `os.system(${0}.value)`;
-};
