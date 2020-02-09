@@ -6,7 +6,7 @@ First Commit was at: 1/1/2020.
 '''
 
 _debug_mode = True
-__version__ = '1.5.2'
+__version__ = '1.5.3'
 
 import ast
 import datetime
@@ -68,11 +68,8 @@ class SignalCatches:
 
 class BaseDatatype:
 
-    def __init__(self, value):
-        self.memtag = assign_to_memory(self)
-        self.data = CompactDict({
-            'value': assign_to_memory(value) if isinstance(value, datatypes) else value,
-        })
+    def __init__(self):
+        self.data = CompactDict()
 
     def do_action(self, action, args):
         if action == 'ADD':
@@ -137,7 +134,7 @@ class Function(BaseDatatype):
             self.args = args
             self.code = code
         self.value = '<Function ' + str(self.name) + '>'
-        super().__init__(self.value)
+        super().__init__()
 
     def __repr__(self):
         return self.value
@@ -168,7 +165,7 @@ class Function(BaseDatatype):
             args = args.value
         args = self.check_args(args)
         if isinstance(self.code, (types.FunctionType, types.BuiltinFunctionType, type)):
-            r = translate_datatypes(self.code(*args))
+            r = translate_datatypes(self.code(*args), temp=False)
             global_vars['_'] = r
             return r
         if ex_args:
@@ -197,7 +194,7 @@ class BuiltinFunction(Function):
 
 class Integer(BaseDatatype):
 
-    def __init__(self, value):
+    def __init__(self, value, temp=False):
         if isinstance(value, tuple):
             if len(value) == 1:
                 value = value[0]
@@ -222,7 +219,7 @@ class Integer(BaseDatatype):
             self.value = value.value.value
         elif isinstance(value, Null):
             self.value = 0
-        super().__init__(self.value)
+        super().__init__(self.value, temp=temp)
 
     def __repr__(self):
         return pformat(self.value)
@@ -319,7 +316,7 @@ class Integer(BaseDatatype):
 
 class Float(BaseDatatype):
 
-    def __init__(self, value):
+    def __init__(self, value, temp=False):
         if isinstance(value, tuple):
             if len(value) == 1:
                 value = value[0]
@@ -344,7 +341,7 @@ class Float(BaseDatatype):
             self.value = float(value.value.value)
         elif isinstance(value, Null):
             self.value = 0.0
-        super().__init__(self.value)
+        super().__init__(self.value, temp=temp)
 
     def __repr__(self):
         return pformat(self.value)
@@ -429,7 +426,7 @@ class Float(BaseDatatype):
 
 class String(BaseDatatype):
 
-    def __init__(self, value):
+    def __init__(self, value, temp=False):
         if isinstance(value, tuple):
             if len(value) == 1:
                 value = value[0]
@@ -445,7 +442,7 @@ class String(BaseDatatype):
             self.value = 'TRUE' if value.value.value else 'FALSE'
         elif isinstance(value, datatypes):
             self.value = String(value.value).value
-        super().__init__(self.value)
+        super().__init__(self.value, temp=temp)
 
     def __repr__(self):
         return pformat(self.value)
@@ -521,7 +518,7 @@ class String(BaseDatatype):
 
 class RegexString(BaseDatatype):
 
-    def __init__(self, value):
+    def __init__(self, value, temp=False):
         if isinstance(value, tuple):
             if len(value) == 1:
                 value = value[0]
@@ -530,7 +527,7 @@ class RegexString(BaseDatatype):
             self.value = re.compile(value)
         elif isinstance(value, String):
             self.value = re.compile(value.value)
-        super().__init__(self.value)
+        super().__init__(self.value, temp=temp)
 
     def __repr__(self):
         return pformat(self.value)
@@ -546,7 +543,7 @@ class RegexString(BaseDatatype):
 
 class Timedelta(BaseDatatype):
 
-    def __init__(self, value):
+    def __init__(self, value, temp=False):
         if isinstance(value, tuple):
             if len(value) == 1:
                 value = value[0]
@@ -557,7 +554,7 @@ class Timedelta(BaseDatatype):
             self.value = value.value
         else:
             self.value = datetime.timedelta()
-        super().__init__(self.value)
+        super().__init__(self.value, temp=temp)
 
     def __repr__(self):
         return repr(self.value)
@@ -584,7 +581,7 @@ class Timedelta(BaseDatatype):
 
 class Date(BaseDatatype):
 
-    def __init__(self, value):
+    def __init__(self, value, temp=False):
         if isinstance(value, tuple):
             if len(value) == 1:
                 value = value[0]
@@ -597,7 +594,7 @@ class Date(BaseDatatype):
             self.value = value.value
         else:
             self.value = datetime.datetime.now()
-        super().__init__(self.value)
+        super().__init__(self.value, temp=temp)
 
     def __repr__(self):
         return repr(self.value)
@@ -616,7 +613,7 @@ class Date(BaseDatatype):
 
 class Slice(BaseDatatype):
 
-    def __init__(self, value):
+    def __init__(self, value, temp=False):
         if isinstance(value, tuple):
             if len(value) == 1:
                 value = value[0]
@@ -627,7 +624,7 @@ class Slice(BaseDatatype):
             self.value = self.make_slice(value.value)
         elif isinstance(value, Slice):
             self.value = self.make_slice(value.display())
-        super().__init__(self.value)
+        super().__init__(self.value, temp=temp)
 
     def __repr__(self):
         return pformat(self.display())
@@ -699,7 +696,7 @@ class Slice(BaseDatatype):
 
 class Boolean(BaseDatatype):
 
-    def __init__(self, value):
+    def __init__(self, value, temp=False):
         if isinstance(value, tuple):
             if len(value) == 1:
                 value = value[0]
@@ -720,7 +717,7 @@ class Boolean(BaseDatatype):
             self.value = Integer(bool(value.value))
         else:
             self.value = Integer(bool(value))
-        super().__init__(self.value)
+        super().__init__(self.value, temp=temp)
 
     def __repr__(self):
         return 'TRUE' if self.value else 'FALSE'
@@ -737,7 +734,7 @@ class Boolean(BaseDatatype):
 
 class Array(BaseDatatype):
 
-    def __init__(self, value=None):
+    def __init__(self, value=None, temp=False):
         mdc_assert(self, value, (tuple, list) + builtin_types, 'ARRAY', showname=False)
         if isinstance(value, (tuple, list)):
             self.value = tuple(value)
@@ -749,7 +746,7 @@ class Array(BaseDatatype):
             self.value = tuple()
         elif isinstance(value, builtin_types):
             self.value = (value,)
-        super().__init__(self.value)
+        super().__init__(self.value, temp=temp)
 
     def __repr__(self):
         return self.__str__()
@@ -803,9 +800,9 @@ class Array(BaseDatatype):
 
 class Null(BaseDatatype):
 
-    def __init__(self, *args):
+    def __init__(self, *args, temp=False):
         self.value = None
-        super().__init__(self.value)
+        super().__init__(self.value, temp=temp)
 
     def __repr__(self):
         return 'NULL'
@@ -1043,24 +1040,6 @@ def eval_statement(code, args, error):
         call_error(str(e), 'eval', error)
 
 
-def pydata_to_mdcldata(pydata):
-    mdcldata = {}
-    for a in dir(pydata):
-        name = a
-        while '_' in a:
-            a = list(a)
-            ind = a.index('_')
-            if ind + 1 < len(a):
-                a[ind + 1] = a[ind + 1].upper()
-            del a[ind]
-            a = ''.join(a)
-        cur_attr = getattr(pydata, name)
-        new_attr = translate_datatypes(cur_attr, error_on_fail=False)
-        if not isinstance(new_attr, type(cur_attr)):
-            mdcldata[a] = new_attr
-    return mdcldata
-
-
 def assign_to_memory(value):
     memtag = 0
     while memtag in tuple(memory.keys()) or not memtag:
@@ -1089,7 +1068,13 @@ def clean_memory():
     for a in memory:
         if a in valids:
             newmemory[a] = memory[a]
+    print(len(dict(memory)))
+    print(len(newmemory))
     memory = deepcopy(newmemory)
+
+
+def represent(value, temp=True):
+    return type(value).__name__ + '(' + pformat(value.value) + ',temp=' + str(temp) + ')'
 
 
 def start(rawcode, filename=None):
@@ -1215,7 +1200,7 @@ def run(
                     'value': assign_to_memory(self.value) if isinstance(self.value, datatypes) else self.value,
                 })
             def __repr__(self):
-                return pformat(evaluate(['!', actions['ECHO'], self], pop=True))
+                return pformat(evaluate(['!', actions['ECHO'], self], temp=True))
             this.__init__ = __init__
             this.__repr__ = __repr__
             datatypes += (this,)
@@ -1259,14 +1244,15 @@ def run(
                 b += 1
             if len(conditions) != len(runcodes):
                 call_error('Number of conditions must be equal to number of code sets to run in an IF-ELIF-ELSE chain.', 'syntax')
+            print(len(memory.keys()._value))
             for b in range(len(conditions)):
                 e = False
                 if conditions[b] == 'ELSE':
                     e = True
-                elif bool(evaluate(conditions[b], error=code[i], args=localargs, pop=True)):
+                elif bool(evaluate(conditions[b], error=code[i], args=localargs, temp=True)):
                     e = True
                 if e:
-                    ev = evaluate(runcodes[b], error=code[i], args=localargs)
+                    ev = evaluate(runcodes[b], error=code[i], args=localargs, temp=True)
                     if not isinstance(ev, Null):
                         if yielding:
                             yielded += [ev]
@@ -1275,6 +1261,7 @@ def run(
                             if echo:
                                 sys.stdout.write(str(ev))
                     break
+            print(len(memory.keys()._value))
         elif a[0] == 'WHILE':
             if len(a) < 3 or ':' not in a:
                 call_error('WHILE loop requires at least a condition, the ":" separator, and code to run.', 'syntax')
@@ -1283,8 +1270,8 @@ def run(
                 call_error('WHILE loop requires at least a condition, the ":" separator, and code to run.', 'syntax')
             condition = contents[0]
             runcode = contents[1]
-            while bool(evaluate(condition, error=code[i], args=localargs, pop=True)):
-                ev = evaluate(runcode, error=code[i], args=localargs)
+            while bool(evaluate(condition, error=code[i], args=localargs, temp=True)):
+                ev = evaluate(runcode, error=code[i], args=localargs, temp=True)
                 if not isinstance(ev, Null):
                     if yielding:
                         yielded += [ev]
@@ -1300,11 +1287,11 @@ def run(
                 call_error('FOR loop requires at least an iterable, the ":" separator, and code to run.', 'syntax')
             if not contents[2:]:
                 variable = None
-                iterable = evaluate(contents[0], error=code[i], args=localargs)
+                iterable = evaluate(contents[0], error=code[i], args=localargs, temp=True)
                 runcode = contents[1]
             else:
                 variable = contents[0][0]
-                iterable = evaluate(contents[1], error=code[i], args=localargs)
+                iterable = evaluate(contents[1], error=code[i], args=localargs, temp=True)
                 runcode = contents[2]
             if variable in global_vars and variable != ',':
                 call_error('Name ' + pformat(variable) + ' is already defined in the global variables list.', 'var')
@@ -1328,7 +1315,7 @@ def run(
                 if variable is not None:
                     local_vars[variable] = val
                 local_vars[','] = val
-                ev = evaluate(runcode, error=code[i], args=localargs, pop=True)
+                ev = evaluate(runcode, error=code[i], args=localargs, temp=True)
                 if not isinstance(ev, Null):
                     if yielding:
                         yielded += [ev]
@@ -1353,7 +1340,7 @@ def run(
                 else:
                     if not keys:
                         call_error('TRY statement requires CATCH keyword before second set of code to run.', 'syntax')
-                    keys = evaluate(keys, error=code[i], args=localargs, pop=True)
+                    keys = evaluate(keys, error=code[i], args=localargs, temp=True)
                     if isinstance(keys, Array):
                         keys = keys.value
                     if not isinstance(keys, (tuple, list)):
@@ -1368,7 +1355,7 @@ def run(
             oldcatch = current_catch
             current_catch = catches
             try:
-                ev = evaluate(runcode, error=code[i], args=localargs, pop=True)
+                ev = evaluate(runcode, error=code[i], args=localargs, temp=True)
                 if not isinstance(ev, Null):
                     if yielding:
                         yielded += [ev]
@@ -1431,7 +1418,7 @@ def run(
                     if k + 1 >= len(key):
                         call_error('Missing attribute to set inside parent "' + key[k - 1] + '".', 'argerr')
                     old = key[k]
-                    key[k] = evaluate([key[k]], error=code[i], args=localargs, pop=True)
+                    key[k] = evaluate([key[k]], error=code[i], args=localargs, temp=True)
                     try:
                         key[k] = memory[key[k].data[key[k + 1]]]
                     except KeyError:
@@ -1441,14 +1428,22 @@ def run(
                     k -= 1
                 k += 1
             value = evaluate(a[a.index(':') + 1:], args=localargs, error=code[i])
+            if value.memtag in memory:
+                del memory[value.memtag]
+            value.memtag = assign_to_memory(value)
             if value.memtag not in memory:
+                print(key, value, value.memtag)
+                raise e
                 call_error('Memory tag ' + pformat(value.memtag) + ' not found in memory.', 'memory')
             if key[2:] or not key:
                 call_error('Invalid setattr syntax.', 'syntax')
             if key[1:]:
-                key[0] = local_vars[key[0]] if isinstance(key[0], str) else key[0].memtag
+                key[0] = local_vars[key[0]] if isinstance(key[0], str) else key[0]
                 memory[key[0]].data[key[1]] = value.memtag
             elif key:
+                if key[0] in local_vars:
+                    if local_vars[key[0]] in memory:
+                        memory[local_vars[key[0]]] = value
                 local_vars[key[0]] = value.memtag
         elif a[0] == 'DEL':
             if len(a) < 2:
@@ -1463,7 +1458,7 @@ def run(
         elif a[0] == 'IMPORT':
             if len(a) < 2:
                 call_error('IMPORT statement requires at least one argument.', 'argerr')
-            fnames = evaluate(a[1:], error=code[i], args=localargs, funcargs=True, pop=True)
+            fnames = evaluate(a[1:], error=code[i], args=localargs, funcargs=True, temp=True)
             if any(not isinstance(f, String) for f in fnames):
                 call_error('IMPORT statement arguments must be of type String.', 'type')
             for fname in fnames:
@@ -1574,9 +1569,9 @@ def run(
         elif a[0] == 'YIELD':
             if not yielding:
                 call_error('Yielding is not possible from the current scope.', 'syntax')
-            yielded += [evaluate(a[1:], error=code[i], args=localargs)]
+            yielded += [evaluate(a[1:], error=code[i], args=localargs, temp=True)]
         else:
-            a = evaluate(a, error=code[i], args=localargs, pop=True)
+            a = evaluate(a, error=code[i], args=localargs, temp=True)
             if isinstance(a, builtin_types) and not isinstance(a, Null):
                 o += str(a)
                 if echo:
@@ -1587,18 +1582,18 @@ def run(
     return o
 
 
-def translate_datatypes(dt, dotuple=True, error_on_fail=True):
+def translate_datatypes(dt, dotuple=True, error_on_fail=True, temp=True):
     if isinstance(dt, tuple([a for a in datatypes_switch.keys() if dotuple or a != tuple])):
-        dt = datatypes_switch[type(dt)](dt)
+        dt = datatypes_switch[type(dt)](dt, temp=temp)
     if isinstance(dt, types.FunctionType):
         args = [['@'] for a in dt.__defaults__] if dt.__defaults__ else []
         args += [['@', '*'] for a in dt.__kwdefaults__] if dt.__kwdefaults__ else []
-        dt = Function(dt.__name__, args, dt)
+        dt = Function(dt.__name__, args, dt, temp=temp)
     if isinstance(dt, types.BuiltinFunctionType):
-        dt = Function(dt.__name__, [], dt)
+        dt = Function(dt.__name__, [], dt, temp=temp)
     if isinstance(dt, Array):
-        contents = tuple(translate_datatypes(a) for a in dt.value)
-        dt = Array(contents)
+        contents = tuple(translate_datatypes(a, temp=temp) for a in dt.value)
+        dt = Array(contents, temp=temp)
     if isinstance(dt, datatypes + (Function,)):
         return dt
     if not (isinstance(dt, tuple) and not dotuple) and error_on_fail:
@@ -1606,7 +1601,7 @@ def translate_datatypes(dt, dotuple=True, error_on_fail=True):
     return dt
 
 
-def eval_datatypes(exp, error=None, dostrings=False):
+def eval_datatypes(exp, error=None, dostrings=False, temp=True):
     if not exp:
         return exp
     new = [a for a in exp]
@@ -1615,42 +1610,30 @@ def eval_datatypes(exp, error=None, dostrings=False):
         if isinstance(new[a], datatypes):
             a += 1
             continue
-        if isinstance(new[a], str):
-            if re.match('^[a-zA-Z]+\.[a-zA-Z]+$', new[a]):
-                keys = new[a].split('.')
-                last = None
-                if keys[0] not in set(local_vars + global_vars):
-                    call_error('Namespace ' + pformat(keys[0]) + ' does not exist or has not been imported.', 'namespace')
-                if len(keys) > 2:
-                    call_error('Too many namespace calls in one expression.', 'namespace')
-                if keys[1] in local_vars[keys[0]]:
-                    new[a] = local_vars[keys[0]][keys[1]]
-                elif keys[1] in global_vars[keys[0]]:
-                    new[a] = global_vars[keys[0]][keys[1]]
         if isinstance(new[a], tuple([b for b in datatypes_switch.keys() if dostrings or b != str])):
             new[a] = datatypes_switch[type(new[a])](new[a])
         if not isinstance(new[a], str):
             pass
         elif re.match('^RE(\'|").+(\'|")', new[a]): # Is new[a] a Regex String? If so, assign Regex() class.
             try:
-                new[a] = RegexString(ast.literal_eval(new[a][2:]))
+                new[a] = RegexString(ast.literal_eval(new[a][2:]), temp=temp)
             except Exception:
                 call_error('Invalid Regex String.', 'syntax', error)
         elif re.match("^'.*'$", new[a]): # Is new[a] a string with single quotes? If so, assign String() class using RAW value.
             new[a] = String(new[a][1:-1])
         elif re.match('^".*"$', new[a]): # Is new[a] a string with double quotes? If so, assign evaluated String() class.
             try:
-                new[a] = String(ast.literal_eval(new[a]))
+                new[a] = String(ast.literal_eval(new[a]), temp=temp)
             except Exception:
                 call_error('Invalid String.', 'syntax', error)
         elif re.match('^(-|\+)*[0-9]*\.[0-9]+$', new[a]): # Is new[a] a float? If so, assign Float() class.
-            new[a] = Float(float(new[a]))
+            new[a] = Float(float(new[a]), temp=temp)
         elif re.match('^(-|\+)*[0-9]+$', new[a]): # Is new[a] an integer? If so, assign Integer() class.
-            new[a] = Integer(int(new[a]))
+            new[a] = Integer(int(new[a]), temp=temp)
         elif new[a] in ('TRUE', 'FALSE', 'True', 'False'): # Is new[a] a boolean? If so, assign Boolean() class.
-            new[a] = Boolean(bool(new[a]))
+            new[a] = Boolean(bool(new[a]), temp=temp)
         elif new[a] in ('null', 'NULL', 'None'): # Is new[a] null? If so, assign Null() class.
-            new[a] = Null()
+            new[a] = Null(temp=temp)
         a += 1
     return new
 
@@ -1672,10 +1655,13 @@ def make_evaluable(line, newinst=False):
     line = [a for a in line if a is not None]
     if newinst:
         line = [assign_to_memory(a) for a in line]
-    return [a if isinstance(a, str) else a.memtag for a in line]
+    return [a if isinstance(a, str)
+        else a if a.memtag is None
+        else a.memtag
+        for a in line]
 
 
-def evaluate(exp, error=None, args=None, funcargs=False, pop=False, newinst=False, clean_run=False):
+def evaluate(exp, error=None, args=None, funcargs=False, temp=True, newinst=False, clean_run=False):
     global current_file
     global current_code
     global current_line
@@ -1692,7 +1678,7 @@ def evaluate(exp, error=None, args=None, funcargs=False, pop=False, newinst=Fals
         '|': 'INDEX',
     }
     new = [a for a in exp]
-    new = eval_datatypes(new, error=error)
+    new = eval_datatypes(new, error=error, temp=temp)
     a = 0
     while a < len(new):
         if isinstance(new[a], datatypes) and not (
@@ -1708,9 +1694,9 @@ def evaluate(exp, error=None, args=None, funcargs=False, pop=False, newinst=Fals
             if a + 1 >= len(new):
                 call_error('Missing second argument for ' + new[a] + ' method.', 'syntax', error)
             try:
-                vals = new[a - 1].do_action(new[a], (evaluate([new[a + 1]], error=error, args=args),))
+                vals = new[a - 1].do_action(new[a], (evaluate([new[a + 1]], error=error, args=args, temp=True),))
                 settype = vals[1] if isinstance(vals, tuple) else type(vals)
-                new[a] = settype(vals[0] if isinstance(vals, tuple) else vals)
+                new[a] = settype(vals[0] if isinstance(vals, tuple) else vals, temp=temp)
                 del new[a + 1]
                 del new[a - 1]
                 a -= 1
@@ -1721,7 +1707,7 @@ def evaluate(exp, error=None, args=None, funcargs=False, pop=False, newinst=Fals
             if a - 1 >= 0:
                 vals = new[a].do_slice(new[a - 1])
                 settype = vals[1] if isinstance(vals, tuple) else type(vals)
-                new[a] = settype(vals[0] if isinstance(vals, tuple) else vals)
+                new[a] = settype(vals[0] if isinstance(vals, tuple) else vals, temp=temp)
                 del new[a - 1]
                 a -= 1
         elif new[a].startswith('args[') and new[a].endswith(']'):
@@ -1745,7 +1731,7 @@ def evaluate(exp, error=None, args=None, funcargs=False, pop=False, newinst=Fals
                 call_error('Cannot get attribute from NULL. (Missing value before `.`)', 'argerr', error)
             if a + 1 >= len(new):
                 call_error('Missing argument to retrieve from "' + new[a - 1] + '".', 'argerr', error)
-            new[a - 1] = evaluate([new[a - 1]], args=args, error=error)
+            new[a - 1] = evaluate([new[a - 1]], args=args, error=error, temp=True)
             try:
                 old = new[a - 1]
                 new[a - 1] = new[a - 1].data[new[a + 1]]
@@ -1759,18 +1745,18 @@ def evaluate(exp, error=None, args=None, funcargs=False, pop=False, newinst=Fals
             if a + 1 >= len(new):
                 call_error('CALL requires a right hand argument.', 'argerr', error)
             del new[a]
-            new[a] = evaluate([new[a]], error=error, args=args, pop=True)
+            new[a] = evaluate([new[a]], error=error, args=args, temp=True)
             thishas = dir(new[a])
             if 'CALL' not in thishas:
                 call_error('Type ' + type(new[a]).__name__ + ' is not callable.', 'attr', error)
             if 'args' not in thishas or 'code' not in thishas:
                 vals = new[a].CALL()
                 settype = vals[1] if isinstance(vals, tuple) else type(vals)
-                new[a] = settype(vals[0] if isinstance(vals, tuple) else vals)
+                new[a] = settype(vals[0] if isinstance(vals, tuple) else vals, temp=True)
                 a -= 1
                 continue
             limit = len(new[a].args)
-            f = evaluate(new[a + 1:], error=error, args=args, funcargs=True)
+            f = evaluate(new[a + 1:], error=error, args=args, funcargs=True, temp=True)
             if not isinstance(f, tuple):
                 f = f,
             f = f[:limit]
@@ -1792,7 +1778,7 @@ def evaluate(exp, error=None, args=None, funcargs=False, pop=False, newinst=Fals
                 call_error('AND requires a right hand argument.', 'argerr', error)
             left = evaluate(replacekeys([new[a - 1]], args=args), error=error, args=args)
             right = evaluate(replacekeys([new[a + 1]], args=args), error=error, args=args)
-            new[a] = Boolean(Boolean(left) and Boolean(right))
+            new[a] = Boolean(Boolean(left, temp=True) and Boolean(right, temp=True))
             del new[a + 1]
             del new[a - 1]
             a -= 1
@@ -1801,9 +1787,9 @@ def evaluate(exp, error=None, args=None, funcargs=False, pop=False, newinst=Fals
                 call_error('OR requires a left hand argument.', 'argerr', error)
             if a + 1 >= len(new):
                 call_error('OR requires a right hand argument.', 'argerr', error)
-            left = evaluate(replacekeys([new[a - 1]], args=args), error=error, args=args)
+            left = evaluate(replacekeys([new[a - 1]], args=args), error=error, args=args, temp=True)
             right = evaluate_line(new, start=a + 1, error=error, args=args)[a + 1]#evaluate(replacekeys([new[a + 1]], args=args), error=error, args=args)
-            new[a] = Boolean(Boolean(left) or Boolean(right))
+            new[a] = Boolean(Boolean(left, temp=True) or Boolean(right, temp=True))
             del new[a + 1]
             del new[a - 1]
             a -= 1
@@ -1812,7 +1798,7 @@ def evaluate(exp, error=None, args=None, funcargs=False, pop=False, newinst=Fals
                 call_error('ONLY requires a left hand argument.', 'argerr', error)
             if a + 1 >= len(new):
                 call_error('ONLY requires a right hand argument.', 'argerr', error)
-            argument = evaluate(replacekeys([new[a - 1]], args=args), error=error, args=args)
+            argument = evaluate(replacekeys([new[a - 1]], args=args), error=error, args=args, temp=True)
             if not isinstance(argument, (Integer, String, Array)):
                 call_error('The ONLY keyword can only iterate over an Array, Integer, or String.', 'type')
             if isinstance(argument, Integer):
@@ -1838,8 +1824,8 @@ def evaluate(exp, error=None, args=None, funcargs=False, pop=False, newinst=Fals
         elif new[a] == 'TO':
             if a + 1 >= len(new):
                 call_error('TO requires a right hand argument.', 'argerr', error)
-            left = evaluate(replacekeys([new[a - 1]], args=args), error=error, args=args) if a > 0 else Integer(0)
-            right = evaluate(replacekeys([new[a + 1]], args=args), error=error, args=args)
+            left = evaluate(replacekeys([new[a - 1]], args=args), error=error, args=args, temp=True) if a > 0 else Integer(0)
+            right = evaluate(replacekeys([new[a + 1]], args=args), error=error, args=args, temp=True)
             if not isinstance(left, Integer):
                 call_error('TO requires an Integer as left hand argument.', 'type', error)
             if not isinstance(right, Integer):
@@ -1860,8 +1846,8 @@ def evaluate(exp, error=None, args=None, funcargs=False, pop=False, newinst=Fals
                 call_error('SKIP requires a left hand argument.', 'argerr', error)
             if a + 1 >= len(new):
                 call_error('SKIP requires a right hand argument.', 'argerr', error)
-            left = evaluate(replacekeys([new[a - 1]], args=args), error=error, args=args)
-            right = evaluate(replacekeys([new[a + 1]], args=args), error=error, args=args)
+            left = evaluate(replacekeys([new[a - 1]], args=args), error=error, args=args, temp=True)
+            right = evaluate(replacekeys([new[a + 1]], args=args), error=error, args=args, temp=True)
             if not isinstance(left, Array):
                 call_error('SKIP can only skip items in an Array.', 'type', error)
             if not isinstance(right, Integer):
@@ -1881,7 +1867,7 @@ def evaluate(exp, error=None, args=None, funcargs=False, pop=False, newinst=Fals
                 call_error('Unmatched ' + pformat(']') + '.', 'syntax', error)
             if not new[a].endswith(']'):
                 call_error('Unmatched ' + pformat('[') + '.', 'syntax', error)
-            values = evaluate(replacekeys(loader.tokenise(new[a][1:-1].strip()), args=args), error=error, args=args)
+            values = evaluate(replacekeys(loader.tokenise(new[a][1:-1].strip()), args=args), error=error, args=args, temp=True)
             if isinstance(values, (tuple, list)):
                 new[:a + 1:] = values
             else:
@@ -1895,14 +1881,14 @@ def evaluate(exp, error=None, args=None, funcargs=False, pop=False, newinst=Fals
                 call_error('Shorthand condition requires a left hand argument.', 'argerr', error)
             if a + 1 >= len(new):
                 call_error('Shorthand condition requires a right hand argument.', 'argerr', error)
-            condition = evaluate(replacekeys(loader.tokenise(new[a][1:-1].strip()), args=args), error=error, args=args, pop=True)
+            condition = evaluate(replacekeys(loader.tokenise(new[a][1:-1].strip()), args=args), error=error, args=args, temp=True)
             r = replacekeys(loader.tokenise(new[a][1:-1].strip()), args=args)
-            left = evaluate(replacekeys([new[a - 1]], args=args), error=error, args=args, pop=True)
-            right = evaluate(replacekeys([new[a + 1]], args=args), error=error, args=args, pop=True)
+            left = evaluate(replacekeys([new[a - 1]], args=args), error=error, args=args, temp=True)
+            right = evaluate(replacekeys([new[a + 1]], args=args), error=error, args=args, temp=True)
             del new[a + 1]
             del new[a - 1]
             a -= 1
-            new[a] = left if bool(Boolean(condition)) else right
+            new[a] = left if bool(Boolean(condition, temp=True)) else right
         elif new[a].startswith('{') or new[a].endswith('}'):
             if not new[a].startswith('{'):
                 call_error('Unmatched ' + pformat('}') + '.', 'syntax')
@@ -1915,9 +1901,9 @@ def evaluate(exp, error=None, args=None, funcargs=False, pop=False, newinst=Fals
                 raw=True,
                 yielding=True,
                 localargs=args)
-            new[a] = Array(value)
+            new[a] = Array(value, temp=temp)
             if not value:
-                new[a] = Null()
+                new[a] = Null(temp=temp)
             elif len(value) == 1:
                 new[a] = value[0]
         elif new[a].startswith('(') or new[a].endswith(')'):
@@ -1925,15 +1911,15 @@ def evaluate(exp, error=None, args=None, funcargs=False, pop=False, newinst=Fals
                 call_error('Unmatched ' + pformat('(') + '.', 'syntax')
             if not new[a].endswith(')'):
                 call_error('Unmatched ' + pformat(')') + '.', 'syntax')
-            new[a] = Slice(new[a])
+            new[a] = Slice(new[a], temp=temp)
             a -= 1
         elif new[a] == 'ARRAY':
             contents = new[a + 1] if a < len(new) - 1 else []
             if contents:
-                contents = evaluate(replacekeys([new[a + 1]], args=args), error=error, args=args)
+                contents = evaluate(replacekeys([new[a + 1]], args=args), error=error, args=args, temp=True)
             if not isinstance(contents, (tuple, list, String, Array)):
                 contents = (contents,)
-            new[a] = translate_datatypes(contents)
+            new[a] = translate_datatypes(contents, temp=temp)
             if a < len(new) - 1:
                 del new[a + 1]
         elif new[a] in local_vars:
@@ -1958,12 +1944,13 @@ def evaluate(exp, error=None, args=None, funcargs=False, pop=False, newinst=Fals
             call_error('Undefined Token: ' + pformat(token), 'undefined', error)
         a += 1
     evaluable = make_evaluable(new, newinst)
-    code = ','.join(['memory[' + pformat(a) + ']' for a in evaluable])
+    code = ','.join([('memory[' + pformat(a) + ']') if isinstance(a, str) else represent(a) for a in evaluable])
+    print(code)
     out = code
     if code and code != ',':
         try:
-            out = eval(code, {'memory': memory})
-            out = translate_datatypes(out, dotuple=not funcargs)
+            out = eval(code)
+            out = translate_datatypes(out, dotuple=not funcargs, temp=temp)
             if funcargs and not isinstance(out, tuple):
                 out = out,
             return out
