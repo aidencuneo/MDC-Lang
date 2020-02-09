@@ -6,7 +6,7 @@ First Commit was at: 1/1/2020.
 '''
 
 _debug_mode = True
-__version__ = '1.5.2'
+__version__ = '1.5.0'
 
 import ast
 import datetime
@@ -68,8 +68,10 @@ class SignalCatches:
 
 class BaseDatatype:
 
-    def __init__(self):
-        self.data = CompactDict()
+    def __init__(self, value=None):
+        self.data = CompactDict({} if value is None else {
+            'value': value,
+        })
 
     def do_action(self, action, args):
         if action == 'ADD':
@@ -134,7 +136,7 @@ class Function(BaseDatatype):
             self.args = args
             self.code = code
         self.value = '<Function ' + str(self.name) + '>'
-        super().__init__()
+        super().__init__(self.value)
 
     def __repr__(self):
         return pformat(self.name)
@@ -166,7 +168,7 @@ class Function(BaseDatatype):
             args = args.value
         args = self.check_args(args)
         if isinstance(self.code, (types.FunctionType, types.BuiltinFunctionType, type)):
-            r = translate_datatypes(self.code(*args), temp=False)
+            r = translate_datatypes(self.code(*args))
             global_vars['_'] = r
             return r
         if ex_args:
@@ -189,7 +191,7 @@ class BuiltinFunction(Function):
 
 class Integer(BaseDatatype):
 
-    def __init__(self, value, temp=False):
+    def __init__(self, value):
         if isinstance(value, tuple):
             if len(value) == 1:
                 value = value[0]
@@ -214,7 +216,7 @@ class Integer(BaseDatatype):
             self.value = value.value.value
         elif isinstance(value, Null):
             self.value = 0
-        super().__init__()
+        super().__init__(self.value)
 
     def __repr__(self):
         return pformat(self.value)
@@ -311,7 +313,7 @@ class Integer(BaseDatatype):
 
 class Float(BaseDatatype):
 
-    def __init__(self, value, temp=False):
+    def __init__(self, value):
         if isinstance(value, tuple):
             if len(value) == 1:
                 value = value[0]
@@ -336,7 +338,7 @@ class Float(BaseDatatype):
             self.value = float(value.value.value)
         elif isinstance(value, Null):
             self.value = 0.0
-        super().__init__()
+        super().__init__(self.value)
 
     def __repr__(self):
         return pformat(self.value)
@@ -421,7 +423,7 @@ class Float(BaseDatatype):
 
 class String(BaseDatatype):
 
-    def __init__(self, value, temp=False):
+    def __init__(self, value):
         if isinstance(value, tuple):
             if len(value) == 1:
                 value = value[0]
@@ -437,7 +439,7 @@ class String(BaseDatatype):
             self.value = 'TRUE' if value.value.value else 'FALSE'
         elif isinstance(value, datatypes):
             self.value = String(value.value).value
-        super().__init__()
+        super().__init__(self.value)
 
     def __repr__(self):
         return pformat(self.value)
@@ -513,7 +515,7 @@ class String(BaseDatatype):
 
 class RegexString(BaseDatatype):
 
-    def __init__(self, value, temp=False):
+    def __init__(self, value):
         if isinstance(value, tuple):
             if len(value) == 1:
                 value = value[0]
@@ -522,7 +524,7 @@ class RegexString(BaseDatatype):
             self.value = re.compile(value)
         elif isinstance(value, String):
             self.value = re.compile(value.value)
-        super().__init__()
+        super().__init__(self.value)
 
     def __repr__(self):
         return pformat(self.value)
@@ -538,7 +540,7 @@ class RegexString(BaseDatatype):
 
 class Timedelta(BaseDatatype):
 
-    def __init__(self, value, temp=False):
+    def __init__(self, value):
         if isinstance(value, tuple):
             if len(value) == 1:
                 value = value[0]
@@ -549,7 +551,7 @@ class Timedelta(BaseDatatype):
             self.value = value.value
         else:
             self.value = datetime.timedelta()
-        super().__init__()
+        super().__init__(self.value)
 
     def __repr__(self):
         return repr(self.value)
@@ -576,7 +578,7 @@ class Timedelta(BaseDatatype):
 
 class Date(BaseDatatype):
 
-    def __init__(self, value, temp=False):
+    def __init__(self, value):
         if isinstance(value, tuple):
             if len(value) == 1:
                 value = value[0]
@@ -589,7 +591,7 @@ class Date(BaseDatatype):
             self.value = value.value
         else:
             self.value = datetime.datetime.now()
-        super().__init__()
+        super().__init__(self.value)
 
     def __repr__(self):
         return repr(self.value)
@@ -608,7 +610,7 @@ class Date(BaseDatatype):
 
 class Slice(BaseDatatype):
 
-    def __init__(self, value, temp=False):
+    def __init__(self, value):
         if isinstance(value, tuple):
             if len(value) == 1:
                 value = value[0]
@@ -619,7 +621,7 @@ class Slice(BaseDatatype):
             self.value = self.make_slice(value.value)
         elif isinstance(value, Slice):
             self.value = self.make_slice(value.display())
-        super().__init__()
+        super().__init__(self.value)
 
     def __repr__(self):
         return pformat(self.display())
@@ -691,13 +693,11 @@ class Slice(BaseDatatype):
 
 class Boolean(BaseDatatype):
 
-    def __init__(self, value, temp=False):
+    def __init__(self, value):
         if isinstance(value, tuple):
             if len(value) == 1:
                 value = value[0]
         mdc_assert(self, value, (int, str, bool) + builtin_types, 'BOOLEAN', showname=False)
-        if isinstance(value, Array):
-            self.value = Integer(bool(value.value))
         if isinstance(value, str):
             value = value.lower()
             if value == 'true':
@@ -712,13 +712,13 @@ class Boolean(BaseDatatype):
             self.value = Integer(bool(value.value))
         else:
             self.value = Integer(bool(value))
-        super().__init__()
+        super().__init__(self.value)
 
     def __repr__(self):
-        return self.value.__repr__()
+        return repr(self.value).upper()
 
     def __str__(self):
-        return self.__repr__().upper()
+        return repr(self)
 
     def __bool__(self):
         return bool(self.value)
@@ -729,7 +729,7 @@ class Boolean(BaseDatatype):
 
 class Array(BaseDatatype):
 
-    def __init__(self, value=None, temp=False):
+    def __init__(self, value=None):
         mdc_assert(self, value, (tuple, list) + builtin_types, 'ARRAY', showname=False)
         if isinstance(value, (tuple, list)):
             self.value = tuple(value)
@@ -741,7 +741,7 @@ class Array(BaseDatatype):
             self.value = tuple()
         elif isinstance(value, builtin_types):
             self.value = (value,)
-        super().__init__()
+        super().__init__(self.value)
 
     def __repr__(self):
         return self.__str__()
@@ -795,9 +795,9 @@ class Array(BaseDatatype):
 
 class Null(BaseDatatype):
 
-    def __init__(self, *args, temp=False):
+    def __init__(self, *args):
         self.value = None
-        super().__init__()
+        super().__init__(self.value)
 
     def __repr__(self):
         return pformat('NULL')
@@ -1035,15 +1035,6 @@ def eval_statement(code, args, error):
         call_error(str(e), 'eval', error)
 
 
-def assign_to_memory(value):
-    memtag = 0
-    while memtag in tuple(memory.keys()) or not memtag:
-        memtag = random.randint(1, 10000000)
-    memtag = hex(memtag)
-    memory[memtag] = value
-    return memtag
-
-
 def start(rawcode, filename=None):
     try:
         run(rawcode, filename, raw=True)
@@ -1096,8 +1087,7 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
             continue
         if a[0] == 'NEW':
             if len(a) < 4 or ':' not in a:
-                call_error('Function declaration requires at least a function name, function code, and the ":" separator.',
-                    'argerr')
+                call_error('Function declaration requires at least a function name, function code, and the ":" separator.', 'argerr')
             specialmethod = False
             name = a[1]
             if a[1] == '!':
@@ -1118,11 +1108,10 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                     call_error('Optional function arguments must be after all positional arguments.', 'syntax')
             if name in local_vars:
                 call_error('Invalid Function name. Function name must not already be defined.', 'defined')
-            local_vars[name] = assign_to_memory(Function(name, arguments, func))
+            local_vars[name] = Function(name, arguments, func)
         elif a[0] == 'DATATYPE':
             if len(a) < 4 or ':' not in a:
-                call_error('Datatype declaration requires at least a datatype name, initialisation code, and the ":" separator.',
-                    'argerr')
+                call_error('Datatype declaration requires at least a datatype name, initialisation code, and the ":" separator.', 'argerr')
             name = a[1]
             func = a[-1]
             arguments = tuple(filter(None, split_list(a[2:-1], ':')))
@@ -1141,7 +1130,7 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
             exec('class ' + name + '(BaseDatatype):pass', globals())
             this = eval(name)
             actions = {b[1:] : local_vars[b] for b in local_vars
-                if isinstance(memory[local_vars[b]], (Function, BuiltinFunction))
+                if isinstance(local_vars[b], (Function, BuiltinFunction))
                 and b[0] == '!'
                 and b[1:] in mdcl_keywords + ('ECHO',)
             }
@@ -1153,16 +1142,18 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                 if not isinstance(args, (list, tuple)):
                     args = args,
                 self.value = evaluate([func], args=args)
-                self.memtag = assign_to_memory(self)
-                self.data = CompactDict({
-                    'value': assign_to_memory(self.value) if isinstance(self.value, datatypes) else self.value,
+                self.data = CompactDict({} if self.value is None else {
+                    'value': self.value,
                 })
             def __repr__(self):
-                return pformat(evaluate(['!', actions['ECHO'], self]))
+                try:
+                    return pformat(actions['ECHO'].CALL(self))
+                except RecursionError:
+                    raise e
             this.__init__ = __init__
             this.__repr__ = __repr__
             datatypes += (this,)
-            local_vars[name] = assign_to_memory(Function(name, arguments, this))
+            local_vars[name] = Function(name, arguments, this)
             del this
             del __init__
             del __repr__
@@ -1202,7 +1193,6 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                 b += 1
             if len(conditions) != len(runcodes):
                 call_error('Number of conditions must be equal to number of code sets to run in an IF-ELIF-ELSE chain.', 'syntax')
-            print(len(memory.keys()._value))
             for b in range(len(conditions)):
                 e = False
                 if conditions[b] == 'ELSE':
@@ -1219,7 +1209,6 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                             if echo:
                                 sys.stdout.write(str(ev))
                     break
-            print(len(memory.keys()._value))
         elif a[0] == 'WHILE':
             if len(a) < 3 or ':' not in a:
                 call_error('WHILE loop requires at least a condition, the ":" separator, and code to run.', 'syntax')
@@ -1377,7 +1366,7 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                     old = key[k]
                     key[k] = evaluate([key[k]], error=code[i], args=localargs)
                     try:
-                        key[k] = memory[key[k].data[key[k + 1]]]
+                        key[k] = key[k].data[key[k + 1]]
                     except KeyError:
                         call_error('Variable ' + pformat(old) + ' does not have attribute ' + pformat(key[k + 1]) + '.',
                             'attr')
@@ -1388,13 +1377,9 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
             if key[2:] or not key:
                 call_error('Invalid settatr syntax.', 'syntax')
             if key[1:]:
-                key[0] = local_vars[key[0]] if isinstance(key[0], str) else key[0]
-                memory[key[0]].data[key[1]] = value.memtag
+                local_vars[key[0]].data[key[1]] = value
             elif key:
-                if key[0] in local_vars:
-                    if local_vars[key[0]] in memory:
-                        memory[local_vars[key[0]]] = value
-                local_vars[key[0]] = value.memtag
+                local_vars[key[0]] = value
         elif a[0] == 'DEL':
             if len(a) < 2:
                 call_error('DEL statement missing variable or key to delete.', 'argerr')
@@ -1408,7 +1393,7 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
         elif a[0] == 'IMPORT':
             if len(a) < 2:
                 call_error('IMPORT statement requires at least one argument.', 'argerr')
-            fnames = evaluate(a[1:], error=code[i], args=localargs, funcargs=True)
+            fnames = evaluate(a[1:], error=code[i], args=localargs)
             if any(not isinstance(f, String) for f in fnames):
                 call_error('IMPORT statement arguments must be of type String.', 'type')
             for fname in fnames:
@@ -1433,7 +1418,7 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
         elif a[0] == 'UNIMPORT':
             if len(a) < 2:
                 call_error('UNIMPORT statement requires at least one argument.', 'argerr')
-            fnames = evaluate(a[1:], error=code[i], args=localargs, funcargs=True)
+            fnames = evaluate(a[1:], error=code[i], args=localargs)
             if any(not isinstance(f, String) for f in fnames):
                 call_error('UNIMPORT statement arguments must be of type String.', 'type')
             for fname in fnames:
@@ -1583,7 +1568,7 @@ def eval_datatypes(exp, error=None, dostrings=False):
         elif new[a] in ('TRUE', 'FALSE', 'True', 'False'): # Is new[a] a boolean? If so, assign Boolean() class.
             new[a] = Boolean(bool(new[a]))
         elif new[a] in ('null', 'NULL', 'None'): # Is new[a] null? If so, assign Null() class.
-            new[a] = Null(temp=temp)
+            new[a] = Null()
         a += 1
     return new
 
@@ -1599,17 +1584,7 @@ def evaluate_line(oldline, start, end=None, error=None, args=None):
     return oldline
 
 
-def make_evaluable(line):
-    if not isinstance(line, (list, tuple)):
-        line = line,
-    line = [a for a in line if a is not None]
-    return [a if isinstance(a, str)
-        else a if a.memtag is None
-        else a.memtag
-        for a in line]
-
-
-def evaluate(exp, error=None, args=None, funcargs=False, newinst=False, clean_run=False):
+def evaluate(exp, error=None, args=None, funcargs=False):
     global current_file
     global current_code
     global current_line
@@ -1626,6 +1601,7 @@ def evaluate(exp, error=None, args=None, funcargs=False, newinst=False, clean_ru
         '|': 'INDEX',
     }
     new = [a for a in exp]
+    #new = eval_functions(eval_datatypes(new, error=error), error=error, args=args)
     new = eval_datatypes(new, error=error)
     a = 0
     while a < len(new):
@@ -1698,7 +1674,9 @@ def evaluate(exp, error=None, args=None, funcargs=False, newinst=False, clean_ru
                 continue
             limit = len(new[a].args)
             f = evaluate(new[a + 1:], error=error, args=args, funcargs=True)
-            if not isinstance(f, tuple):
+            if isinstance(f, Array):
+                f = f.value
+            elif not isinstance(f, tuple):
                 f = f,
             f = f[:limit]
             oldfile = current_file
@@ -1844,7 +1822,7 @@ def evaluate(exp, error=None, args=None, funcargs=False, newinst=False, clean_ru
                 localargs=args)
             new[a] = Array(value)
             if not value:
-                new[a] = Null(temp=temp)
+                new[a] = Null()
             elif len(value) == 1:
                 new[a] = value[0]
         elif new[a].startswith('(') or new[a].endswith(')'):
@@ -1865,36 +1843,25 @@ def evaluate(exp, error=None, args=None, funcargs=False, newinst=False, clean_ru
                 del new[a + 1]
         elif new[a] in local_vars:
             new[a] = local_vars[new[a]]
-            if new[a] not in memory:
-                call_error('Memory tag ' + pformat(new[a]) + ' not found in memory.', 'memory', error)
+            a -= 1
         elif new[a] in global_vars:
             new[a] = global_vars[new[a]]
-            if new[a] not in memory:
-                call_error('Memory tag ' + pformat(new[a]) + ' not found in memory.', 'memory', error)
+            a -= 1
         elif new[a] in reserved_names:
             call_error('Invalid syntactical usage of reserved name.', 'syntax')
-        elif not re.match('^0x[A-Fa-f0-9]+$', new[a]):
+        else:
             token = new[a]
             if len(token) > 100:
                 token = token[:97] + '...'
             call_error('Undefined Token: ' + pformat(token), 'syntax', error)
         a += 1
-    code = ','.join(make_evaluable(new))
-    out = code
-    if code and code != ',':
-        try:
-            out = eval(code)
-            out = translate_datatypes(out, dotuple=not funcargs)
-            if funcargs and not isinstance(out, tuple):
-                out = out,
-            return out
-        except Exception as e:
-            print(exp)
-            print(new)
-            print(code)
-            print(memory)
-            call_error(str(e), 'exp', error)
-    return out
+    if not new:
+        return new
+    if funcargs and len(new) == 1:
+        new = new,
+    if len(new) == 1:
+        return translate_datatypes(new[0])
+    return translate_datatypes(new)
 
 
 def replacekeys(line, args=None):
@@ -1916,7 +1883,7 @@ def replacekeys(line, args=None):
             if args is not None:
                 key = int(line[a][5:-1])
                 if key >= len(args):
-                    line[a] = Null()
+                    call_error('Local argument list index out of range, ' + str(key) + ' > ' + str(len(args) - 1) + '.', 'outofrange', line)
                 line[a] = args[key]
         elif line[a].startswith('`') and line[a].endswith('`'):
             line[a] = '<EVAL>' + replaceargs(line[a][1:-1]) + '\n\\' + pformat(line[a]) + '</EVAL>'
@@ -2023,11 +1990,11 @@ class BFList:
         content = String('') if isinstance(args[0], Null) else args[0]
         sep = args[1] if isinstance(args[1], String) else String(' ')
         end = args[2] if isinstance(args[2], String) else String('\n')
-        if isinstance(args[0], Array):
+        if isinstance(content, Array):
             content = String(sep.value.join([str(a) for a in content.value]))
-        elif isinstance(args[0], str):
+        elif isinstance(content, str):
             content = String(content)
-        print(content.value, end=end.value)
+        print(content, end=end.value)
         return String('')
 
     @staticmethod
@@ -2119,6 +2086,7 @@ reserved_names = (
     'TO',
     'SKIP',
     'ARRAY',
+    'ALPHABET',
 
     'INTEGER',
     'FLOAT',
@@ -2185,7 +2153,6 @@ start_error_tags = error_tags = CompactDict({
     'readonly': 'READONLY VALUE',
     'fatal': 'FATAL ERROR',
     'defined': 'ALREADY DEFINED VALUE',
-    'memory': 'MEMORY ERROR',
 })
 
 datatypes_switch = {
@@ -2205,98 +2172,76 @@ builtin_types = tuple(set(datatypes_switch.values())) + (
     Slice,
     Function,
 )
-datatypes = copy(builtin_types)
 
-memory = {} # INIT - KEEP THIS
-memory = CompactDict({
-    hex(10): BuiltinFunction('INTEGER',
+local_vars = CompactDict({
+    'INTEGER': BuiltinFunction('INTEGER',
         [['@', '*']],
         Integer),
-    hex(11): BuiltinFunction('FLOAT',
+    'FLOAT': BuiltinFunction('FLOAT',
         [['@', '*']],
         Float),
-    hex(12): BuiltinFunction('STRING',
+    'STRING': BuiltinFunction('STRING',
         [['@', '*']],
         String),
-    hex(13): BuiltinFunction('REGEX',
+    'REGEX': BuiltinFunction('REGEX',
         [[String, '*']],
         RegexString),
-    hex(14): BuiltinFunction('TIMEDELTA',
+    'TIMEDELTA': BuiltinFunction('TIMEDELTA',
         [['@', '*']],
         Timedelta),
-    hex(15): BuiltinFunction('DATE',
+    'DATE': BuiltinFunction('DATE',
         [['@', '*']],
         Date),
-    hex(16): BuiltinFunction('SLICE',
+    'SLICE': BuiltinFunction('SLICE',
         [['@', '*']],
         Slice),
-    hex(17): BuiltinFunction('BOOLEAN',
+    'BOOLEAN': BuiltinFunction('BOOLEAN',
         [['@', '*']],
         Boolean),
-    hex(18): BuiltinFunction('NULL',
+    'NULL': BuiltinFunction('NULL',
         [],
         Null),
 
-    hex(20): BuiltinFunction('READ',
+    'READ': BuiltinFunction('READ',
         [[String, '*']],
         BFList.read),
-    hex(21): BuiltinFunction('LEN',
+    'LEN': BuiltinFunction('LEN',
         [[String, Array]],
         BFList.get_length),
-    hex(22): BuiltinFunction('READFILE',
+    'READFILE': BuiltinFunction('READFILE',
         [[String]],
         BFList.readfile),
-    hex(23): BuiltinFunction('WRITEFILE',
+    'WRITEFILE': BuiltinFunction('WRITEFILE',
         [[String], [String]],
         BFList.writefile),
-    hex(24): BuiltinFunction('TYPE',
+    'TYPE': BuiltinFunction('TYPE',
         [['@']],
         BFList.get_type),
-    hex(25): BuiltinFunction('ECHO',
+    'ECHO': BuiltinFunction('ECHO',
         [['@'], ['*', String], ['*', String]],
         BFList.echo),
-    hex(26): BuiltinFunction('WAIT',
+    'WAIT': BuiltinFunction('WAIT',
         [[Integer, Float]],
         BFList.wait),
-
-    hex(30): BuiltinFunction('GLOBALS',
+    'GLOBALS': BuiltinFunction('GLOBALS',
         [],
         BFList.get_globals),
-    hex(31): BuiltinFunction('LOCALS',
+    'LOCALS': BuiltinFunction('LOCALS',
         [],
         BFList.get_locals),
-    hex(32): BuiltinFunction('ARGV',
+    'ARGV': BuiltinFunction('ARGV',
         [[Integer, '*']],
         BFList.get_argv),
-    hex(33): BuiltinFunction('EXIT',
+
+    'NOT': BuiltinFunction('NOT',
+        [['@']],
+        lambda x: Boolean(not x.value)),
+
+    'EXIT': BuiltinFunction('EXIT',
         [],
         lambda x: (String(''), sys.exit())[0]),
 })
 
-local_vars = CompactDict({
-    'INTEGER': hex(10),
-    'FLOAT': hex(11),
-    'STRING': hex(12),
-    'REGEX': hex(13),
-    'TIMEDELTA': hex(14),
-    'DATE': hex(15),
-    'SLICE': hex(16),
-    'BOOLEAN': hex(17),
-    'NULL': hex(18),
-
-    'READ': hex(20),
-    'LEN': hex(21),
-    'READFILE': hex(22),
-    'WRITEFILE': hex(23),
-    'TYPE': hex(24),
-    'ECHO': hex(25),
-    'WAIT': hex(26),
-
-    'GLOBALS': hex(30),
-    'LOCALS': hex(31),
-    'ARGV': hex(32),
-    'EXIT': hex(33),
-})
-
+datatypes = copy(builtin_types)
 global_vars = CompactDict()
 global_args = [String(a) for a in sys.argv[1:]]

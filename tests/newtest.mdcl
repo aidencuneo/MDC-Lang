@@ -1,16 +1,33 @@
+NEW !SLICE
+: MySliceable
+: Slice
+: {
+    YIELD $0.value $1;
+};
+
 NEW !ECHO
-: Empty
+: MySliceable
 : {
     YIELD $0.value;
 };
 
-DATATYPE Empty
-: Null *
+DATATYPE MySliceable
+: Array String
 : {
-    YIELD NULL;
+    YIELD $0 < [!TYPE $0] = 'Array' > [ ARRAY $0 ];
 };
 
-a : !Empty;
-a.store : 10;
-a.store.value : 100;
-!ECHO a.store;
+flip : (::-1);
+sliceable : !MySliceable [ 1 TO 6 ];
+
+!ECHO sliceable flip;
+
+mystring : 'ThIS iS my StRIng.';
+noncase  : !mystring;
+mystring.works : !BOOLEAN 0.000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+000000000000001;
+
+!ECHO [ mystring noncase ] "\n";
+!ECHO mystring.works;

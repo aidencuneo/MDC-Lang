@@ -1,23 +1,23 @@
-NEW choice
+NEW EXEC
+: String
+: {
+    YIELD `eval(${0}.value)`;
+};
+
+NEW CHOICE
 : Array
 : {
     YIELD `random.choice(${0}.value)`;
 };
 
-NEW randint
+NEW RANGE
 : Integer
 : Integer *
 : {
-    IF !TYPE $1 = 'Integer' : {
+    IF TYPE $1 EQ 'Integer' : {
         min : $0; max : $1;
     } : ELSE : {
         min :  0; max : $0;
     };
     YIELD EXEC [ 'random.randint(' ADD min ADD ', ' ADD max ADD ')' ];
-};
-
-NEW shuffle
-: Array
-: {
-    YIELD `[exec('l=list(${0}.value)',globals()),random.shuffle(l),l][2]`;
 };

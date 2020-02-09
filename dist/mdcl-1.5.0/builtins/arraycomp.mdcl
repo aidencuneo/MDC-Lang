@@ -1,4 +1,4 @@
-NEW join
+NEW JOIN
 : Array
 : String *
 : {
@@ -15,30 +15,23 @@ NEW join
     YIELD FC;
 };
 
-NEW find
+NEW FIND
 : String
 : String
 : {
     YIELD `${0}.value.index(${1}.value)` < $0 HAS $1 > NULL;
 };
 
-NEW strepl
+NEW FLIP
+: String Array
+: {
+    YIELD `${0}.value[::-1]`;
+};
+
+NEW STREPL
 : String
 : String
 : String
 : {
     YIELD JOIN [ SPLIT $0 $1 ] $2;
-};
-
-NEW asSet
-: Array
-: {
-    new : ARRAY;
-    FOR $0 : {
-        IF ! [ new HAS , ] : {
-            new : new + ,;
-        };
-    };
-    YIELD new;
-    DEL new;
 };
