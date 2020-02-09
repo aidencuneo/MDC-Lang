@@ -1,33 +1,17 @@
-NEW !SLICE
-: MySliceable
-: Slice
-: {
-    YIELD $0.value $1;
+filter : (! : Array : Function) => {
+    f : ARRAY;
+    FOR $0 : {
+        IF !$1, : {
+            f : f + ,;
+        };
+    };
+    YIELD f;
 };
 
-NEW !ECHO
-: MySliceable
-: {
-    YIELD $0.value;
+list : TO 60;
+newlist : !filter list (!:@) => {
+    YIELD !BOOLEAN $0;
 };
 
-DATATYPE MySliceable
-: Array String
-: {
-    YIELD $0 < [!TYPE $0] = 'Array' > [ ARRAY $0 ];
-};
-
-flip : (::-1);
-sliceable : !MySliceable [ 1 TO 6 ];
-
-!ECHO sliceable flip;
-
-mystring : 'ThIS iS my StRIng.';
-noncase  : !mystring;
-mystring.works : !BOOLEAN 0.000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-000000000000001;
-
-!ECHO [ mystring noncase ] "\n";
-!ECHO mystring.works;
+!ECHO list;
+!ECHO newlist;

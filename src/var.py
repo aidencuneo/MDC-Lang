@@ -6,7 +6,7 @@ First Commit was at: 1/1/2020.
 '''
 
 _debug_mode = True
-__version__ = '1.5.0'
+__version__ = '1.5.1'
 
 import ast
 import datetime
@@ -624,9 +624,6 @@ class Slice(BaseDatatype):
         super().__init__(self.value)
 
     def __repr__(self):
-        return pformat(self.display())
-
-    def __str__(self):
         return self.display()
 
     def display(self):
@@ -689,6 +686,42 @@ class Slice(BaseDatatype):
         if isinstance(obj.SLICE, (Function, BuiltinFunction)):
             return obj.SLICE.CALL((obj, self,))
         return obj.SLICE(self)
+
+
+class Argtypes(BaseDatatype):
+
+    def __init__(self, value):
+        if isinstance(value, tuple):
+            if len(value) == 1:
+                value = value[0]
+        mdc_assert(self, value, (tuple, list, Array, Argtypes), 'ARGTYPES', showname=False)
+        if isinstance(value, (tuple, list)):
+            self.value = self.make_argtypes(value)
+        elif isinstance(value, Array):
+            self.value = self.make_argtypes(value.value)
+        elif isinstance(value, Argtypes):
+            self.value = value.value
+        super().__init__(self.value)
+
+    def __repr__(self):
+        return self.display()
+
+    def display(self):
+        return '(! : ' + ' : '.join([' '.join(a) for a in self.value]) + ')'
+
+    def make_argtypes(self, value):
+        newvalue = []
+        for a in value:
+            line = []
+            for b in a.split():
+                if b.strip():
+                    if b.endswith('*') and len(b) > 1:
+                        line += [b.strip()[:-1]]
+                        line += ['*']
+                    else:
+                        line += [b.strip()]
+            newvalue += [line]
+        return newvalue
 
 
 class Boolean(BaseDatatype):
@@ -1085,31 +1118,7 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
         if not a:
             i += 1
             continue
-        if a[0] == 'NEW':
-            if len(a) < 4 or ':' not in a:
-                call_error('Function declaration requires at least a function name, function code, and the ":" separator.', 'argerr')
-            specialmethod = False
-            name = a[1]
-            if a[1] == '!':
-                specialmethod = True
-                name = '!' + a[2]
-                del a[1]
-            func = a[-1]
-            arguments = tuple(filter(None, split_list(a[2:-1], ':')))
-            types = [b.__name__ for b in builtin_types]
-            optionals = False
-            for b in arguments:
-                for c in b:
-                    if c not in types and not c == '*' and not c == '@' and not specialmethod:
-                        call_error(pformat(c) + ' is not defined as a type.', 'attr')
-                if '*' in b:
-                    optionals = True
-                elif optionals and not '*' in b:
-                    call_error('Optional function arguments must be after all positional arguments.', 'syntax')
-            if name in local_vars:
-                call_error('Invalid Function name. Function name must not already be defined.', 'defined')
-            local_vars[name] = Function(name, arguments, func)
-        elif a[0] == 'DATATYPE':
+        elif a[0] == 'NEW':
             if len(a) < 4 or ':' not in a:
                 call_error('Datatype declaration requires at least a datatype name, initialisation code, and the ":" separator.', 'argerr')
             name = a[1]
@@ -1257,7 +1266,7 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
             oldvariable = None
             if variable in local_vars:
                 oldvariable = local_vars[variable]
-            for value in translate_datatypes(iterable).value:
+            for val in translate_datatypes(iterable).value:
                 if variable is not None:
                     local_vars[variable] = val
                 local_vars[','] = val
@@ -1644,6 +1653,32 @@ def evaluate(exp, error=None, args=None, funcargs=False):
                 if key >= len(global_args):
                     new[a] = Null()
                 new[a] = global_args[key]
+        elif new[a] == '=>':
+            if a - 1 < 0:
+                call_error('Inline Function declaration requires a left hand argument.', 'argerr', error)
+            if a + 1 >= len(new):
+                call_error('Inline Function declaration requires a right hand argument.', 'argerr', error)
+            if not isinstance(new[a - 1], Argtypes):
+                call_error('Inline Function declaration requires Argtypes as left hand argument.', 'type', error)
+            if not (new[a + 1].startswith('{') and new[a + 1].endswith('}')):
+                call_error('Inline Function declaration requires a code block as right hand argument.', 'type', error)
+            func = new[a + 1]
+            arguments = new[a - 1].value
+            types = [b.__name__ for b in builtin_types]
+            optionals = False
+            for b in arguments:
+                for c in b:
+                    if not re.match('^[a-zA-Z]*$', c) and not c == '*' and not c == '@':
+                        call_error(pformat(c) + ' is not defined as a type.', 'attr')
+                if '*' in b:
+                    optionals = True
+                elif optionals and not '*' in b:
+                    call_error('Optional function arguments must be after all positional arguments.', 'syntax')
+            new[a] = Function('<InlineFunction>', arguments, func)
+            new[a].value = '<InlineFunction>'
+            del new[a + 1]
+            del new[a - 1]
+            a += 1
         elif new[a] == '.':
             if a - 1 < 0:
                 call_error('Cannot get attribute from NULL. (Missing value before `.`)', 'argerr', error)
@@ -1689,7 +1724,7 @@ def evaluate(exp, error=None, args=None, funcargs=False):
             current_file = oldfile
             current_code = oldcode
             current_line = oldline
-            del new[a + 1:a + 1 + limit]
+            del new[a + 1:]
         elif new[a] == 'AND':
             if a - 1 < 0:
                 call_error('AND requires a left hand argument.', 'argerr', error)
@@ -1830,7 +1865,15 @@ def evaluate(exp, error=None, args=None, funcargs=False):
                 call_error('Unmatched ' + pformat('(') + '.', 'syntax')
             if not new[a].endswith(')'):
                 call_error('Unmatched ' + pformat(')') + '.', 'syntax')
-            new[a] = Slice(new[a])
+            b = [z.strip() for z in new[a][1:-1].split(':') if z.strip()]
+            if not b:
+                new[a] = Argtypes(b[1:])
+            elif b[0] == '!':
+                new[a] = Argtypes(b[1:])
+            elif all([re.match('^(-|\+)*[0-9]+$', z) for z in b]):
+                new[a] = Slice(new[a])
+            else:
+                call_error('Invalid Syntax for bracket expression: ' + pformat(new[a]), 'syntax', error)
             a -= 1
         elif new[a] == 'ARRAY':
             contents = new[a + 1] if a < len(new) - 1 else []
@@ -1883,8 +1926,9 @@ def replacekeys(line, args=None):
             if args is not None:
                 key = int(line[a][5:-1])
                 if key >= len(args):
-                    call_error('Local argument list index out of range, ' + str(key) + ' > ' + str(len(args) - 1) + '.', 'outofrange', line)
-                line[a] = args[key]
+                    line[a] = Null()
+                else:
+                    line[a] = args[key]
         elif line[a].startswith('`') and line[a].endswith('`'):
             line[a] = '<EVAL>' + replaceargs(line[a][1:-1]) + '\n\\' + pformat(line[a]) + '</EVAL>'
     return line
@@ -2171,6 +2215,7 @@ builtin_types = tuple(set(datatypes_switch.values())) + (
     RegexString,
     Slice,
     Function,
+    Argtypes,
 )
 
 local_vars = CompactDict({
