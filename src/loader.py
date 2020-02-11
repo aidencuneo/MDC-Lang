@@ -15,7 +15,7 @@ symbols = string.punctuation
 whitespace = string.whitespace
 
 
-def get_code(fname, fromline=0, specificline=0, setcode=None):
+def get_code(fname, fromline=0, specificline=0, specificindex=None, setcode=None):
     try:
         if not setcode:
             with open(fname) as f:
@@ -26,13 +26,15 @@ def get_code(fname, fromline=0, specificline=0, setcode=None):
             code = code[code.index('\n') + 1:]
         if specificline > 0:
             code = code.split('\n')[specificline - 1]
+        if specificindex is not None:
+            code = code.split('\n')[specificindex]
         return code
     except Exception as e:
         return e
 
 
 def process(code):
-    return tokenise_file(code.replace('\n', ''))
+    return tokenise_file(code)#.replace('\n', ''))
 
 
 def count_lines(fname):

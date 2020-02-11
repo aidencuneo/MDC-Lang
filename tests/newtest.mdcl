@@ -1,17 +1,25 @@
-filter : (! : Array : Function) => {
-    f : ARRAY;
-    FOR $0 : {
-        IF !$1, : {
-            f : f + ,;
-        };
-    };
-    YIELD f;
+game:;
+
+game.getTime : () => {
+    a : !STRING !DATE;
+    YIELD a;
 };
 
-list : TO 60;
-newlist : !filter list (!:@) => {
-    YIELD !BOOLEAN $0;
-};
+/*
+This is for next update.
 
-!ECHO list;
-!ECHO newlist;
+I'm going to change the Function arguments system so that you don't write
+Datatypes anymore, you write variable names instead.
+Basically how it happens in Python. I'm trying to go further towards this
+language being a *really* high level language, one that can do complex things
+with the smallest amount of code possible.
+So to do that, I'm going to be changing the Function arguments system to make
+it even more efficient, easier to use, and shorter in code size.
+
+game.printToConsole : (! text) => {
+    !ECHO text;
+};
+*/
+
+!ECHO game.getTime;
+!game.getTime;

@@ -6,7 +6,7 @@ First Commit was at: 1/1/2020.
 '''
 
 _debug_mode = True
-__version__ = '1.5.1'
+__version__ = '1.5.2'
 
 import ast
 import datetime
@@ -115,35 +115,31 @@ class Function(BaseDatatype):
             self.name = name.name
             self.args = name.args
             self.code = name.code
-        elif isinstance(name, str) and args is None and code is None:
-            if name in local_vars:
-                name = local_vars[name]
-                self.name = name.name
-                self.args = name.args
-                self.code = name.code
-            else:
-                call_error('Function can not be declared with only a str argument, '
-                    'arguments and code are required. This is a Python error.', 'fatal')
         else:
             if args is None or code is None:
                 call_error('Function can not be declared without second or third arguments '
                     'if first argument is not a Function. This is a Python error.', 'fatal')
-            self.name = name
             for a in range(len(args)):
                 for b in range(len(args[a])):
                     if isinstance(args[a][b], type):
                         args[a][b] = args[a][b].__name__
+            self.name = name
             self.args = args
             self.code = code
-        self.value = '<Function ' + str(self.name) + '>'
+        self.value = self.get_value()
         super().__init__(self.value)
+        self.data['name'] = self.name
 
     def __repr__(self):
-        return pformat(self.name)
-        return pformat(self.name) + ', ' + pformat(self.args) + ', ' + pformat(self.code)
+        return self.get_value()
 
     def __str__(self):
-        return self.value
+        return repr(self)
+
+    def get_value(self):
+        if self.name == '<InlineFunction>':
+            return self.name
+        return '<Function ' + self.name + '>'
 
     def check_args(self, args):
         r = [a for a in self.args if '*' not in a]
@@ -184,7 +180,7 @@ class BuiltinFunction(Function):
         if isinstance(args, Array):
             args = args.value
         args = self.check_args(args)
-        r = self.code(args)
+        r = translate_datatypes(self.code(args))
         global_vars['_'] = r
         return r
 
@@ -437,6 +433,8 @@ class String(BaseDatatype):
             self.value = str(value.value.pattern)
         elif isinstance(value, Boolean):
             self.value = 'TRUE' if value.value.value else 'FALSE'
+        elif isinstance(value, builtin_types):
+            self.value = str(value.value)
         elif isinstance(value, datatypes):
             self.value = String(value.value).value
         super().__init__(self.value)
@@ -527,9 +525,6 @@ class RegexString(BaseDatatype):
         super().__init__(self.value)
 
     def __repr__(self):
-        return pformat(self.value)
-
-    def __str__(self):
         return 'RE' + pformat(self.value.pattern)
 
     def EQ(self, other):
@@ -554,9 +549,6 @@ class Timedelta(BaseDatatype):
         super().__init__(self.value)
 
     def __repr__(self):
-        return repr(self.value)
-
-    def __str__(self):
         return str(self.value)
 
     def ADD(self, other):
@@ -594,9 +586,6 @@ class Date(BaseDatatype):
         super().__init__(self.value)
 
     def __repr__(self):
-        return repr(self.value)
-
-    def __str__(self):
         return str(self.value)
 
     def ADD(self, other):
@@ -959,6 +948,14 @@ class Debug:
         print(lst, Debug.ts(lst))
 
 
+def as_tuple(value):
+    if isinstance(value, Array):
+        value = value.value
+    elif not isinstance(value, tuple):
+        value = value,
+    return value
+
+
 def initialise_path(src_path, local_path):
     if not os.path.isdir(src_path):
         call_error("The path: '" + str(src_path) + "' could not be found.", 'dirnotfound')
@@ -982,21 +979,15 @@ def initialise_path(src_path, local_path):
 
 def initialise_global_vars(file=None):
     global_vars['FILE'] = String(current_file if file is None else file)
-    global_vars['LINE'] = Integer(1)
-    global_vars['_'] = Null()
     global_vars[','] = Null()
-    global_vars['ERR'] = Null()
 
 
 def call_error(text=None, error_type=None, line=None, args=None, showfile=True):
     original_error = error_type
-    if isinstance(line, (list, tuple)):
-        line = ' '.join([str(a) for a in line])
     if isinstance(error_type, MDCLError):
         er = str(error_type)
         error_type = er[:er.index('::')]
         text = er[er.index('::') + 2:]
-    global_vars['ERR'] = String(error_type)
     e = 'ERROR'
     if error_type == 'fatal':
         if not text:
@@ -1012,22 +1003,34 @@ def call_error(text=None, error_type=None, line=None, args=None, showfile=True):
         e = error_tags[error_type]
     if error_type in current_catch and not isinstance(original_error, MDCLError):
         raise MDCLError(error_type + '::' + (text if text is not None else ''))
-    thisfile = os.path.abspath(current_file)
-    method = []
-    while thisfile.endswith('METHOD>'):
-        method += [thisfile[rindex(thisfile, '\n') + 1:-7]]
-        thisfile = thisfile[:rindex(thisfile, '\n') - 1:]
     if e != 'fatal':
-        print('\n> ' + e + ' (' + error_type + ') ' + (
-            'at file "' + thisfile + '", in ' + ', in '.join(
-                method[::-1] if method else ['line ' + str(current_line)])
-            if showfile else '') + (':' if text or not method else ' <'))
-    if not method:
-        codeline = loader.get_code('', specificline=current_line, setcode=current_code)
-        if isinstance(codeline, str):
+        print('\n-- Error Breadcrumbs --\n')
+    for bci in range(len(breadcrumbs)):
+        bc = breadcrumbs[bci]
+        thisfile = os.path.abspath(bc[0])
+        codesplit = bc[1].split('\n')
+        lines = [
+            codesplit[bc[3] - 1],
+            codesplit[bc[3]],
+            codesplit[bc[3] + 1],
+        ]
+        codeline = codesplit[bc[3]]
+        if line in lines:
+            line = lines.index(line)
+            if line == 0:
+                bc[3] -= 1
+            elif line == 2:
+                bc[3] += 1
+            codeline = lines[line]
+        print(('At file "' + thisfile + '", line ' + str(bc[3] + 1) + (
+            ' (of surrounding code block)' if bc[4] else '')
+            if showfile else ''))
+        if bci == len(breadcrumbs) - 1:
+            print('  ~~ ' + codeline.strip())
+        elif isinstance(codeline, str):
             print('  -> ' + codeline.strip())
-    if line:
-        print('  ~~ ' + line)
+        print('')
+    print('>> ' + e + ' (' + error_type + ')')
     if text and error_type != 'keyboardinterrupt':
         print('  :: ' + text)
     elif text is None and error_type != 'keyboardinterrupt':
@@ -1051,9 +1054,20 @@ def mdc_assert(first, second, types, action, showall=False, showname=True):
     if not isinstance(types, (list, tuple)):
         types = types,
     if not isinstance(second, types):
-        types = '(' + ', '.join([a.__name__ for a in types if showall or (not showall and a in builtin_types)]) + ')'
+        typestr = '(' + ', '.join([a.__name__ for a in types if showall or (not showall and a in builtin_types)]) + ')'
         s = type(first).__name__ + ' o' if showname else 'O'
-        call_error(s + 'perand type for ' + action + ' must fit into: ' + types + '. "' + type(second).__name__ + '" is invalid.',
+        s += 'perand type for ' + action + ' '
+        if not showall:
+            types = tuple(a for a in types if a in datatypes)
+        if types == builtin_types == datatypes:
+            s += 'must be a builtin type or currently imported MDCL Datatype'
+        elif types == builtin_types:
+            s += 'must be a builtin type'
+        elif types == datatypes:
+            s += 'must be a currently imported MDCL Datatype'
+        else:
+            s += 'must fit into: ' + typestr
+        call_error(s + '. "' + type(second).__name__ + '" is invalid.',
             'assert')
 
 
@@ -1076,14 +1090,15 @@ def start(rawcode, filename=None):
     except (KeyboardInterrupt, EOFError):
         sig_c.send('SIGINT')
     except RecursionError:
-        call_error('Too many recursive calls in a row.', 'recursion')
+        call_error('Too many recursive calls.', 'recursion')
     except ZeroDivisionError:
         call_error('Attemped division or modulo by zero.', 'zerodivision')
     except Exception as e:
         call_error(error_type='fatal')
 
 
-def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=False, yielding=False, localargs=None):
+def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=False, yielding=False, localargs=None, independent=False, has_breadcrumbs=True):
+    global breadcrumbs
     global current_file
     global current_code
     global current_line
@@ -1095,19 +1110,29 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
         initialise_global_vars(file=filename)
     if filename != 'keep':
         current_file = '<EVAL>' if filename is None else filename
-        current_code = current_code if filename is None else code
-        current_line = 1
+        if not independent:
+            current_code = current_code if filename is None else code
+            current_line = 1
+    if independent:
+        filename = ''
+        line = 1
     if raw:
         code = loader.process(code)
     if oneline:
         code = [code]
     lines = loader.tokenise_file(rawcode, dofilter=False)
+    if has_breadcrumbs:
+        breadcrumbs += [[
+            current_file,
+            rawcode, 
+            0,
+            line if independent else current_line,
+            independent,
+        ]]
     o = ''
     yielded = []
     i = 0
     while i < len(code):
-        current_line += lines[i].count('\n')
-        global_vars['LINE'] = Integer(current_line)
         if not code[i].strip():
             i += 1
             continue
@@ -1209,7 +1234,7 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                 elif bool(evaluate(conditions[b], error=code[i], args=localargs)):
                     e = True
                 if e:
-                    ev = evaluate(runcodes[b], error=code[i], args=localargs)
+                    ev = evaluate(runcodes[b], error=code[i], args=localargs, has_breadcrumbs=False)
                     if not isinstance(ev, Null):
                         if yielding:
                             yielded += [ev]
@@ -1227,7 +1252,7 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
             condition = contents[0]
             runcode = contents[1]
             while bool(evaluate(condition, error=code[i], args=localargs)):
-                ev = evaluate(runcode, error=code[i], args=localargs)
+                ev = evaluate(runcode, error=code[i], args=localargs, has_breadcrumbs=False)
                 if not isinstance(ev, Null):
                     if yielding:
                         yielded += [ev]
@@ -1270,7 +1295,7 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                 if variable is not None:
                     local_vars[variable] = val
                 local_vars[','] = val
-                ev = evaluate(runcode, error=code[i], args=localargs)
+                ev = evaluate(runcode, error=code[i], args=localargs, has_breadcrumbs=False)
                 if not isinstance(ev, Null):
                     if yielding:
                         yielded += [ev]
@@ -1386,8 +1411,15 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
             if key[2:] or not key:
                 call_error('Invalid settatr syntax.', 'syntax')
             if key[1:]:
+                if key[1] == 'value':
+                    call_error('Attribute "value" of type "' + type(local_vars[key[0]]).__name__ + '" is a readonly value.',
+                        'readonly')
+                if isinstance(value, (Function, BuiltinFunction)):
+                    value.name = key[1]
                 local_vars[key[0]].data[key[1]] = value
             elif key:
+                if isinstance(value, (Function, BuiltinFunction)):
+                    value.name = key[0]
                 local_vars[key[0]] = value
         elif a[0] == 'DEL':
             if len(a) < 2:
@@ -1520,7 +1552,16 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                 o += str(a)
                 if echo:
                     sys.stdout.write(str(a))
+        if independent:
+            line += lines[i].count('\n')
+        else:
+            current_line += lines[i].count('\n')
+        if has_breadcrumbs:
+            breadcrumbs[-1][3] = line if independent else current_line
+            breadcrumbs[-1][2] = i
         i += 1
+    if has_breadcrumbs:
+        breadcrumbs = breadcrumbs[:-1]
     if yielding:
         return yielded
     return o
@@ -1593,7 +1634,7 @@ def evaluate_line(oldline, start, end=None, error=None, args=None):
     return oldline
 
 
-def evaluate(exp, error=None, args=None, funcargs=False):
+def evaluate(exp, error=None, args=None, funcargs=False, has_breadcrumbs=True):
     global current_file
     global current_code
     global current_line
@@ -1610,7 +1651,6 @@ def evaluate(exp, error=None, args=None, funcargs=False):
         '|': 'INDEX',
     }
     new = [a for a in exp]
-    #new = eval_functions(eval_datatypes(new, error=error), error=error, args=args)
     new = eval_datatypes(new, error=error)
     a = 0
     while a < len(new):
@@ -1697,7 +1737,7 @@ def evaluate(exp, error=None, args=None, funcargs=False):
             if a + 1 >= len(new):
                 call_error('CALL requires a right hand argument.', 'argerr', error)
             del new[a]
-            new[a] = evaluate([new[a]], error=error, args=args)
+            new[a:] = as_tuple(evaluate(new[a:], error=error, args=args))
             thishas = dir(new[a])
             if 'CALL' not in thishas:
                 call_error('Type ' + type(new[a]).__name__ + ' is not callable.', 'attr', error)
@@ -1708,22 +1748,8 @@ def evaluate(exp, error=None, args=None, funcargs=False):
                 a -= 1
                 continue
             limit = len(new[a].args)
-            f = evaluate(new[a + 1:], error=error, args=args, funcargs=True)
-            if isinstance(f, Array):
-                f = f.value
-            elif not isinstance(f, tuple):
-                f = f,
-            f = f[:limit]
-            oldfile = current_file
-            oldcode = current_code
-            oldline = current_line
-            current_file = current_file + '\n<' + new[a].name + 'METHOD>'
-            current_code = new[a].code
-            current_line = 1
+            f = as_tuple(evaluate(new[a + 1:], error=error, args=args, funcargs=True))[:limit]
             new[a] = new[a].CALL(f)
-            current_file = oldfile
-            current_code = oldcode
-            current_line = oldline
             del new[a + 1:]
         elif new[a] == 'AND':
             if a - 1 < 0:
@@ -1762,7 +1788,7 @@ def evaluate(exp, error=None, args=None, funcargs=False):
             runcode = new[a + 1].strip()[1:-1].strip()
             output = []
             for value in argument:
-                value = run(runcode, filename='keep', echo=False, raw=True, yielding=True, localargs=[value])
+                value = run(runcode, filename='keep', echo=False, raw=True, yielding=True, localargs=[value], has_breadcrumbs=has_breadcrumbs)
                 newvalue = value
                 if not value:
                     newvalue = []
@@ -1854,7 +1880,9 @@ def evaluate(exp, error=None, args=None, funcargs=False):
                 echo=True,
                 raw=True,
                 yielding=True,
-                localargs=args)
+                localargs=args,
+                independent=True,
+                has_breadcrumbs=has_breadcrumbs)
             new[a] = Array(value)
             if not value:
                 new[a] = Null()
@@ -2072,6 +2100,7 @@ current_file = ''
 current_code = ''
 current_line = 1
 current_catch = {}
+breadcrumbs = []
 
 reserved_names = (
     'FILE',
