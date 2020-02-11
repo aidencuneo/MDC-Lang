@@ -1,25 +1,19 @@
-game:;
-
-game.getTime : () => {
-    a : !STRING !DATE;
-    YIELD a;
+maketag : (text, printTo*) => {
+    IF printTo:{'<'+printTo+'>'};
+    text;
+    IF printTo:{'</'+printTo+'>'};
+    !ECHO;
 };
 
-/*
-This is for next update.
+!maketag 'This is a website title' 'title';
+!maketag 'Hello there.' 'div';
+!maketag 'This is raw text.';
 
-I'm going to change the Function arguments system so that you don't write
-Datatypes anymore, you write variable names instead.
-Basically how it happens in Python. I'm trying to go further towards this
-language being a *really* high level language, one that can do complex things
-with the smallest amount of code possible.
-So to do that, I'm going to be changing the Function arguments system to make
-it even more efficient, easier to use, and shorter in code size.
-
-game.printToConsole : (! text) => {
-    !ECHO text;
+args : (text, printTo*);
+func : args => {
+    IF printTo:{'FROM '+printTo+":\n> "};
+    !ECHO text '' "\n";
 };
-*/
 
-!ECHO game.getTime;
-!game.getTime;
+!func 'hey';
+!func 'hey' 'this place';

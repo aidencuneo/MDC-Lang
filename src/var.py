@@ -6,7 +6,7 @@ First Commit was at: 1/1/2020.
 '''
 
 _debug_mode = True
-__version__ = '1.5.2'
+__version__ = '1.5.3'
 
 import ast
 import datetime
@@ -21,7 +21,7 @@ import time
 import traceback as tb
 import types
 
-from copy import copy
+from copy import copy, deepcopy
 from functools import partial
 from pprint import pformat
 
@@ -150,10 +150,6 @@ class Function(BaseDatatype):
         for a in range(len(self.args)):
             if a >= len(args):
                 args += (Null(),)
-            elif type(args[a]).__name__ not in self.args[a] and '@' not in self.args[a] and not isinstance(args[a], Null):
-                types = '(' + ', '.join([b for b in self.args[a] if b != '*']) + ')'
-                call_error('Argument ' + str(a + 1) + ' of function ' + self.name + ' must fit into: '
-                    + types + '. "' + type(args[a]).__name__ + '" is invalid.', 'assert')
         if len(args) > len(self.args):
             call_error('Function ' + self.name + ' received too many arguments, '
                 'maximum amount for this Function is ' + str(len(self.args)) + '.', 'argerr')
@@ -677,18 +673,18 @@ class Slice(BaseDatatype):
         return obj.SLICE(self)
 
 
-class Argtypes(BaseDatatype):
+class Arglist(BaseDatatype):
 
     def __init__(self, value):
         if isinstance(value, tuple):
             if len(value) == 1:
                 value = value[0]
-        mdc_assert(self, value, (tuple, list, Array, Argtypes), 'ARGTYPES', showname=False)
-        if isinstance(value, (tuple, list)):
-            self.value = self.make_argtypes(value)
-        elif isinstance(value, Array):
-            self.value = self.make_argtypes(value.value)
-        elif isinstance(value, Argtypes):
+        mdc_assert(self, value, (str, String, Arglist), 'ARGTYPES', showname=False)
+        if isinstance(value, str):
+            self.value = self.make_arglist(value)
+        elif isinstance(value, String):
+            self.value = self.make_arglist(value.value)
+        elif isinstance(value, Arglist):
             self.value = value.value
         super().__init__(self.value)
 
@@ -696,20 +692,30 @@ class Argtypes(BaseDatatype):
         return self.display()
 
     def display(self):
-        return '(! : ' + ' : '.join([' '.join(a) for a in self.value]) + ')'
+        return '(' + ', '.join([' '.join(a) for a in self.value]) + (',' if len(self.value) == 1 else '') + ')'
 
-    def make_argtypes(self, value):
+    def make_arglist(self, value):
+        value = value.strip('()')
         newvalue = []
-        for a in value:
+        optionals = False
+        for a in value.split(','):
             line = []
-            for b in a.split():
-                if b.strip():
-                    if b.endswith('*') and len(b) > 1:
-                        line += [b.strip()[:-1]]
-                        line += ['*']
-                    else:
-                        line += [b.strip()]
-            newvalue += [line]
+            a = a.strip()
+            if a.endswith('*'):
+                if a == '*':
+                    call_error('Empty "*" found in Arglist: ' + pformat('(' + value + ')'), 'syntax')
+                line += [a[:-1]]
+                line += ['*']
+                optionals = True
+            elif '*' in a:
+                call_error('Out of place "*" found in Arglist: ' + pformat('(' + value + ')'), 'syntax')
+            elif optionals:
+                call_error('Positional argument can not be placed after optional argument in Arglist: ' + pformat('(' + value + ')'),
+                    'syntax')
+            elif a:
+                line += [a]
+            if line:
+                newvalue += [line]
         return newvalue
 
 
@@ -1010,9 +1016,9 @@ def call_error(text=None, error_type=None, line=None, args=None, showfile=True):
         thisfile = os.path.abspath(bc[0])
         codesplit = bc[1].split('\n')
         lines = [
-            codesplit[bc[3] - 1],
-            codesplit[bc[3]],
-            codesplit[bc[3] + 1],
+            codesplit[bc[3] - 1] if bc[3] - 1 < len(codesplit) else False,
+            codesplit[bc[3]] if bc[3] < len(codesplit) else False,
+            codesplit[bc[3] + 1] if bc[3] + 1 < len(codesplit) else False,
         ]
         codeline = codesplit[bc[3]]
         if line in lines:
@@ -1638,8 +1644,9 @@ def evaluate(exp, error=None, args=None, funcargs=False, has_breadcrumbs=True):
     global current_file
     global current_code
     global current_line
+    global local_vars
     if not exp:
-        return Null()
+        return ()
     reps = {
         '+': 'ADD',
         '-': 'SUB',
@@ -1698,24 +1705,13 @@ def evaluate(exp, error=None, args=None, funcargs=False, has_breadcrumbs=True):
                 call_error('Inline Function declaration requires a left hand argument.', 'argerr', error)
             if a + 1 >= len(new):
                 call_error('Inline Function declaration requires a right hand argument.', 'argerr', error)
-            if not isinstance(new[a - 1], Argtypes):
-                call_error('Inline Function declaration requires Argtypes as left hand argument.', 'type', error)
+            if not isinstance(new[a - 1], Arglist):
+                call_error('Inline Function declaration requires Arglist as left hand argument.', 'type', error)
             if not (new[a + 1].startswith('{') and new[a + 1].endswith('}')):
                 call_error('Inline Function declaration requires a code block as right hand argument.', 'type', error)
             func = new[a + 1]
             arguments = new[a - 1].value
-            types = [b.__name__ for b in builtin_types]
-            optionals = False
-            for b in arguments:
-                for c in b:
-                    if not re.match('^[a-zA-Z]*$', c) and not c == '*' and not c == '@':
-                        call_error(pformat(c) + ' is not defined as a type.', 'attr')
-                if '*' in b:
-                    optionals = True
-                elif optionals and not '*' in b:
-                    call_error('Optional function arguments must be after all positional arguments.', 'syntax')
             new[a] = Function('<InlineFunction>', arguments, func)
-            new[a].value = '<InlineFunction>'
             del new[a + 1]
             del new[a - 1]
             a += 1
@@ -1747,9 +1743,21 @@ def evaluate(exp, error=None, args=None, funcargs=False, has_breadcrumbs=True):
                 new[a] = settype(vals[0] if isinstance(vals, tuple) else vals)
                 a -= 1
                 continue
-            limit = len(new[a].args)
-            f = as_tuple(evaluate(new[a + 1:], error=error, args=args, funcargs=True))[:limit]
+            f = as_tuple(evaluate(new[a + 1:], error=error, args=args, funcargs=True))
+            oldlocals = deepcopy(local_vars)
+            for i in range(len(new[a].args)):
+                if not new[a].args[i]:
+                    continue
+                if i >= len(f) and new[a].args[i][-1] == '*':
+                    f += Null(),
+                elif i >= len(f):
+                    call_error('Function ' + new[a].name + ' requires at least ' + str(len(new[a].args[i]))
+                        + ' positional argument' + ('' if len(new[a].args[i]) == 1 else 's') + '.', 'argerr')
+                if '@' not in new[a].args[i]:
+                    local_vars[new[a].args[i][0]] = f[i]
+            local_vars['self'] = new[a]
             new[a] = new[a].CALL(f)
+            local_vars = deepcopy(oldlocals)
             del new[a + 1:]
         elif new[a] == 'AND':
             if a - 1 < 0:
@@ -1895,9 +1903,9 @@ def evaluate(exp, error=None, args=None, funcargs=False, has_breadcrumbs=True):
                 call_error('Unmatched ' + pformat(')') + '.', 'syntax')
             b = [z.strip() for z in new[a][1:-1].split(':') if z.strip()]
             if not b:
-                new[a] = Argtypes(b[1:])
-            elif b[0] == '!':
-                new[a] = Argtypes(b[1:])
+                new[a] = Arglist(new[a])
+            elif ',' in new[a]:
+                new[a] = Arglist(new[a])
             elif all([re.match('^(-|\+)*[0-9]+$', z) for z in b]):
                 new[a] = Slice(new[a])
             else:
@@ -2244,7 +2252,7 @@ builtin_types = tuple(set(datatypes_switch.values())) + (
     RegexString,
     Slice,
     Function,
-    Argtypes,
+    Arglist,
 )
 
 local_vars = CompactDict({
@@ -2292,7 +2300,7 @@ local_vars = CompactDict({
         [['@']],
         BFList.get_type),
     'ECHO': BuiltinFunction('ECHO',
-        [['@'], ['*', String], ['*', String]],
+        [['@', '*'], [String, '*'], [String, '*']],
         BFList.echo),
     'WAIT': BuiltinFunction('WAIT',
         [[Integer, Float]],
