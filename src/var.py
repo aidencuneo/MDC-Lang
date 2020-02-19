@@ -6,7 +6,7 @@ First Commit was at: 1/1/2020.
 '''
 
 _debug_mode = True
-__version__ = '1.5.3'
+__version__ = '1.5.4'
 
 import ast
 import datetime
@@ -962,6 +962,16 @@ def as_tuple(value):
     return value
 
 
+def do_action(first, action, second, error=None):
+    try:
+        vals = first.do_action(action, (second,))
+        settype = vals[1] if isinstance(vals, tuple) else type(vals)
+        return settype(vals[0] if isinstance(vals, tuple) else vals)
+    except AttributeError:
+        call_error('Type ' + type(first).__name__ + ' does not have a method for handling ' + action,
+            'attr', error)
+
+
 def initialise_path(src_path, local_path):
     if not os.path.isdir(src_path):
         call_error("The path: '" + str(src_path) + "' could not be found.", 'dirnotfound')
@@ -1389,8 +1399,18 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
             except Exception as e:
                 call_error(error_type='fatal')
             current_catch = oldcatch
-        elif ':' in a:
-            key = [''.join(z) for z in split_list(a[:a.index(':')], '.')]
+        elif ':' in a or '+:' in a or '-:' in a or '*:' in a or '/:' in a:
+            if ':' in a:
+                oper = ':'
+            elif '+:' in a:
+                oper = '+:'
+            elif '-:' in a:
+                oper = '-:'
+            elif '*:' in a:
+                oper = '*:'
+            elif '/:' in a:
+                oper = '/:'
+            key = [''.join(z) for z in split_list(a[:a.index(oper)], '.')]
             k = 0
             while k < len(key):
                 if k + 1 < len(key):
@@ -1413,19 +1433,47 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                     del key[k + 1]
                     k -= 1
                 k += 1
-            value = evaluate(a[a.index(':') + 1:], args=localargs, error=code[i])
+            value = evaluate(a[a.index(oper) + 1:], args=localargs, error=code[i])
+            if isinstance(value, tuple):
+                if not value:
+                    value = Null()
+                elif value:
+                    value = translate_datatypes(value[0])
             if key[2:] or not key:
                 call_error('Invalid settatr syntax.', 'syntax')
             if key[1:]:
+                if oper != ':' and key[0] not in local_vars:
+                    call_error('Undefined Token: ' + pformat(key[0]), 'syntax', code[i])
+                if oper != ':' and key[1] not in local_vars[key[0]].data:
+                    call_error('Variable ' + pformat(key[0]) + ' does not have attribute ' + pformat(key[1]) + '.',
+                        'attr')
                 if key[1] == 'value':
                     call_error('Attribute "value" of type "' + type(local_vars[key[0]]).__name__ + '" is a readonly value.',
                         'readonly')
                 if isinstance(value, (Function, BuiltinFunction)):
                     value.name = key[1]
+                if oper == '+:':
+                    value = do_action(local_vars[key[0]].data[key[1]], 'ADD', value, error=code[i])
+                elif oper == '-:':
+                    value = do_action(local_vars[key[0]].data[key[1]], 'SUB', value, error=code[i])
+                elif oper == '*:':
+                    value = do_action(local_vars[key[0]].data[key[1]], 'MULT', value, error=code[i])
+                elif oper == '/:':
+                    value = do_action(local_vars[key[0]].data[key[1]], 'DIV', value, error=code[i])
                 local_vars[key[0]].data[key[1]] = value
             elif key:
+                if oper != ':' and key[0] not in local_vars:
+                    call_error('Undefined Token: ' + pformat(key[0]), 'syntax', code[i])
                 if isinstance(value, (Function, BuiltinFunction)):
                     value.name = key[0]
+                if oper == '+:':
+                    value = do_action(local_vars[key[0]], 'ADD', value, error=code[i])
+                elif oper == '-:':
+                    value = do_action(local_vars[key[0]], 'SUB', value, error=code[i])
+                elif oper == '*:':
+                    value = do_action(local_vars[key[0]], 'MULT', value, error=code[i])
+                elif oper == '/:':
+                    value = do_action(local_vars[key[0]], 'DIV', value, error=code[i])
                 local_vars[key[0]] = value
         elif a[0] == 'DEL':
             if len(a) < 2:

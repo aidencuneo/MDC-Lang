@@ -100,6 +100,14 @@ def tokenise(line):
         ) and not (
             t == '=' and a == '>'
         ) and not (
+            t == '+' and a == ':'
+        ) and not (
+            t == '-' and a == ':'
+        ) and not (
+            t == '*' and a == ':'
+        ) and not (
+            t == '/' and a == ':'
+        ) and not (
             sq or dq or bt or rb or sb > 0 or cb > 0 or lg > 0 or bcomment
         ):
             l.append(o.strip())

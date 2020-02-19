@@ -1,19 +1,30 @@
-maketag : (text, printTo*) => {
-    IF printTo:{'<'+printTo+'>'};
-    text;
-    IF printTo:{'</'+printTo+'>'};
-    !ECHO;
+tag : 10;
+tag +: 1;
+tag.type : 'TAG';
+tag.type +: 10;
+!ECHO tag.type;
+
+/*
+
+compile : (data,) => {
+    doc : '<html>';
+    FOR tag : data : {
+        doc : doc + '<' + [tag.name] + '>';
+        doc : doc + [tag.inner];
+        doc : doc + '</' + [tag.name] + '>';
+    };
+    YIELD doc + '</html>';
 };
 
-!maketag 'This is a website title' 'title';
-!maketag 'Hello there.' 'div';
-!maketag 'This is raw text.';
-
-args : (text, printTo*);
-func : args => {
-    IF printTo:{'FROM '+printTo+":\n> "};
-    !ECHO text '' "\n";
+div : (inner,) => {
+    tag:;
+    tag.name  : 'div';
+    tag.inner : inner;
+    YIELD tag;
 };
 
-!func 'hey';
-!func 'hey' 'this place';
+data : ARRAY;
+data : data + [!div 'Hey there'];
+html : !compile data;
+
+!ECHO html;
