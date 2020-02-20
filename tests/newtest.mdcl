@@ -1,30 +1,27 @@
-tag : 10;
-tag +: 1;
-tag.type : 'TAG';
-tag.type +: 10;
-!ECHO tag.type;
+'Welcome to this really cool game!';
+"\n";
 
-/*
+sticks : 0;
 
-compile : (data,) => {
-    doc : '<html>';
-    FOR tag : data : {
-        doc : doc + '<' + [tag.name] + '>';
-        doc : doc + [tag.inner];
-        doc : doc + '</' + [tag.name] + '>';
+WHILE 1 : {
+    i : '';
+    TRY : {
+        i : !READ '> ';
+    } : CATCH 'keyboardinterrupt' : {
+        !ECHO "\nGoodbye.";
+        BREAK;
     };
-    YIELD doc + '</html>';
+
+    IF i = '0' : {
+        sticks +: 1;
+        !ECHO 'Collected stick.';
+    } : ELIF i = 'bag' : {
+        !ECHO 'Sticks: ' + sticks;
+    } : ELIF i = 'exit' : {
+        !ECHO 'Goodbye.';
+        BREAK;
+    } : ELSE : {
+        !ECHO "Sorry, I didn't understand that.";
+    };
+
 };
-
-div : (inner,) => {
-    tag:;
-    tag.name  : 'div';
-    tag.inner : inner;
-    YIELD tag;
-};
-
-data : ARRAY;
-data : data + [!div 'Hey there'];
-html : !compile data;
-
-!ECHO html;

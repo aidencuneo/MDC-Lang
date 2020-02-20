@@ -1,0 +1,37 @@
+NEW JOIN
+: Array
+: String *
+: {
+    FC : '';
+    FOR i : $0 : {
+        FC : FC + i;
+        IF $1 : {
+            FC : FC + $1;
+        };
+    };
+    IF $1 : {
+        FC : FC - [ LEN $1 ];
+    };
+    YIELD FC;
+};
+
+NEW FIND
+: String
+: String
+: {
+    YIELD `${0}.value.index(${1}.value)` < $0 HAS $1 > NULL;
+};
+
+NEW FLIP
+: String Array
+: {
+    YIELD `${0}.value[::-1]`;
+};
+
+NEW STREPL
+: String
+: String
+: String
+: {
+    YIELD JOIN [ SPLIT $0 $1 ] $2;
+};

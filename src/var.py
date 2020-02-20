@@ -6,7 +6,7 @@ First Commit was at: 1/1/2020.
 '''
 
 _debug_mode = True
-__version__ = '1.5.4'
+__version__ = '1.5.5'
 
 import ast
 import datetime
@@ -931,6 +931,19 @@ class Null(BaseDatatype):
         return False, Boolean
 
 
+class BreakToken(BaseDatatype):
+
+    def __init__(self, *args):
+        self.value = None
+        super().__init__(self.value)
+
+    def __repr__(self):
+        return pformat('BREAK')
+
+    def __str__(self):
+        return 'BREAK'
+
+
 class MDCLError(Exception):
     pass
 
@@ -1030,7 +1043,7 @@ def call_error(text=None, error_type=None, line=None, args=None, showfile=True):
             codesplit[bc[3]] if bc[3] < len(codesplit) else False,
             codesplit[bc[3] + 1] if bc[3] + 1 < len(codesplit) else False,
         ]
-        codeline = codesplit[bc[3]]
+        codeline = codesplit[bc[3]] if bc[3] < len(codesplit) else ''
         if line in lines:
             line = lines.index(line)
             if line == 0:
@@ -1113,12 +1126,14 @@ def start(rawcode, filename=None):
         call_error(error_type='fatal')
 
 
-def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=False, yielding=False, localargs=None, independent=False, has_breadcrumbs=True):
+def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=False,
+    yielding=False, localargs=None, independent=False, has_breadcrumbs=True):
     global breadcrumbs
     global current_file
     global current_code
     global current_line
     global current_catch
+    global break_token
     global local_vars
     global datatypes
     code = rawcode
@@ -1174,7 +1189,7 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                 if '*' in b:
                     optionals = True
                 elif optionals and not '*' in b:
-                    call_error('Optional initialisation function arguments must be after all positional arguments.', 'syntax')
+                    call_error('Optional function arguments for init must be after all positional arguments.', 'syntax')
             if name in globals() or name in locals() or name in builtin_types:
                 call_error('Invalid Datatype name. Datatype name must not already be defined.', 'defined')
             exec('class ' + name + '(BaseDatatype):pass', globals())
@@ -1251,6 +1266,8 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                     e = True
                 if e:
                     ev = evaluate(runcodes[b], error=code[i], args=localargs, has_breadcrumbs=False)
+                    if isinstance(ev, BreakToken):
+                        return ev
                     if not isinstance(ev, Null):
                         if yielding:
                             yielded += [ev]
@@ -1268,7 +1285,11 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
             condition = contents[0]
             runcode = contents[1]
             while bool(evaluate(condition, error=code[i], args=localargs)):
+                break_token = True
                 ev = evaluate(runcode, error=code[i], args=localargs, has_breadcrumbs=False)
+                if isinstance(ev, BreakToken):
+                    break_token = False
+                    break
                 if not isinstance(ev, Null):
                     if yielding:
                         yielded += [ev]
@@ -1311,7 +1332,11 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                 if variable is not None:
                     local_vars[variable] = val
                 local_vars[','] = val
+                break_token = True
                 ev = evaluate(runcode, error=code[i], args=localargs, has_breadcrumbs=False)
+                if isinstance(ev, BreakToken):
+                    break_token = False
+                    break
                 if not isinstance(ev, Null):
                     if yielding:
                         yielded += [ev]
@@ -1343,7 +1368,7 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                         keys = keys,
                     for c in keys:
                         if not isinstance(c, String):
-                            call_error('CATCH keyword arguments must be of type String.', 'type')
+                            call_error('CATCH arguments must be of type String.', 'type')
                         catches[c.value] = b
                     keys = []
             if keys:
@@ -1352,6 +1377,8 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
             current_catch = catches
             try:
                 ev = evaluate(runcode, error=code[i], args=localargs)
+                if isinstance(ev, BreakToken):
+                    return ev
                 if not isinstance(ev, Null):
                     if yielding:
                         yielded += [ev]
@@ -1361,6 +1388,8 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                             sys.stdout.write(str(ev))
             except MDCLError as e:
                 ev = perform_try_catch(e, error=code[i], args=localargs)
+                if isinstance(ev, BreakToken):
+                    return ev
                 if not isinstance(ev, Null):
                     if yielding:
                         yielded += [ev]
@@ -1371,6 +1400,8 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
             except (KeyboardInterrupt, EOFError):
                 if sig_c.switches['INT']:
                     ev = perform_try_catch(MDCLError('keyboardinterrupt::'), error=code[i], args=localargs)
+                    if isinstance(ev, BreakToken):
+                        return ev
                     if not isinstance(ev, Null):
                         if yielding:
                             yielded += [ev]
@@ -1380,6 +1411,8 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                                 sys.stdout.write(str(ev))
             except RecursionError:
                 ev = perform_try_catch(MDCLError('recursion::Too many recursive calls in a row.'), error=code[i], args=localargs)
+                if isinstance(ev, BreakToken):
+                    return ev
                 if not isinstance(ev, Null):
                     if yielding:
                         yielded += [ev]
@@ -1389,6 +1422,8 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                             sys.stdout.write(str(ev))
             except ZeroDivisionError:
                 ev = perform_try_catch(MDCLError('zerodivision::Attemped division or modulo by zero.'), error=code[i], args=localargs)
+                if isinstance(ev, BreakToken):
+                    return ev
                 if not isinstance(ev, Null):
                     if yielding:
                         yielded += [ev]
@@ -1569,6 +1604,8 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
             if not isinstance(errortext, String):
                 call_error('Error text must be of type String', 'type')
             ev = perform_try_catch(MDCLError(errortag.value + '::' + errortext.value), error=code[i], args=localargs)
+            if isinstance(ev, BreakToken):
+                return ev
             if not isinstance(ev, Null):
                 if yielding:
                     yielded += [ev]
@@ -1602,6 +1639,8 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
             yielded += [evaluate(a[1:], error=code[i], args=localargs)]
         else:
             a = evaluate(a, error=code[i], args=localargs)
+            if isinstance(a, BreakToken):
+                return a
             if isinstance(a, builtin_types) and not isinstance(a, Null):
                 o += str(a)
                 if echo:
@@ -1692,6 +1731,7 @@ def evaluate(exp, error=None, args=None, funcargs=False, has_breadcrumbs=True):
     global current_file
     global current_code
     global current_line
+    global break_token
     global local_vars
     if not exp:
         return ()
@@ -1894,6 +1934,10 @@ def evaluate(exp, error=None, args=None, funcargs=False, has_breadcrumbs=True):
             del new[a + 1]
             del new[a - 1]
             a -= 1
+        elif new[a] == 'BREAK':
+            if not break_token:
+                call_error('Can not BREAK non-existent loop.', 'break', error)
+            return BreakToken()
         elif new[a].startswith('<EVAL>') and new[a].endswith('</EVAL>'):
             new[a] = new[a][6:-7]
             b = new[a].split('\n\\')
@@ -1939,6 +1983,8 @@ def evaluate(exp, error=None, args=None, funcargs=False, has_breadcrumbs=True):
                 localargs=args,
                 independent=True,
                 has_breadcrumbs=has_breadcrumbs)
+            if isinstance(value, BreakToken):
+                return value
             new[a] = Array(value)
             if not value:
                 new[a] = Null()
@@ -2157,6 +2203,7 @@ current_code = ''
 current_line = 1
 current_catch = {}
 breadcrumbs = []
+break_token = False
 
 reserved_names = (
     'FILE',
@@ -2282,6 +2329,7 @@ start_error_tags = error_tags = CompactDict({
     'readonly': 'READONLY VALUE',
     'fatal': 'FATAL ERROR',
     'defined': 'ALREADY DEFINED VALUE',
+    'break': 'BREAK KEYWORD ERROR',
 })
 
 datatypes_switch = {
@@ -2301,6 +2349,7 @@ builtin_types = tuple(set(datatypes_switch.values())) + (
     Slice,
     Function,
     Arglist,
+    BreakToken,
 )
 
 local_vars = CompactDict({
