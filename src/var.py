@@ -6,7 +6,7 @@ First Commit was at: 1/1/2020.
 '''
 
 _debug_mode = True
-__version__ = '1.5.5'
+__version__ = '1.5.6'
 
 import ast
 import datetime
@@ -74,7 +74,9 @@ class BaseDatatype:
         })
 
     def do_action(self, action, args):
-        if action == 'ADD':
+        if action in self.data:
+            f = self.data[action]
+        elif action == 'ADD':
             f = self.ADD
         elif action == 'SUB':
             f = self.SUB
@@ -103,8 +105,8 @@ class BaseDatatype:
         else:
             raise AttributeError
         if isinstance(f, (Function, BuiltinFunction)):
-            value = f.CALL((self,) + args)
-            return value, type(value)
+            val = evaluate(['!', f, self] + list(args), func_self=False)
+            return val, type(val)
         return f(*args)
 
 
@@ -215,6 +217,9 @@ class Integer(BaseDatatype):
 
     def __bool__(self):
         return bool(self.value)
+
+    def CALL(self):
+        return not self.value, Boolean
 
     def ADD(self, other):
         mdc_assert(self, other, (Integer, Float, String), 'ADD')
@@ -338,6 +343,9 @@ class Float(BaseDatatype):
     def __bool__(self):
         return bool(self.value)
 
+    def CALL(self):
+        return not self.value, Boolean
+
     def ADD(self, other):
         mdc_assert(self, other, (Integer, Float), 'ADD')
         return self.value + other.value, Float
@@ -442,7 +450,7 @@ class String(BaseDatatype):
         return self.value
 
     def CALL(self):
-        return self.value.lower(), String
+        return not self.value, Boolean
 
     def ADD(self, other):
         mdc_assert(self, other, datatypes, 'ADD')
@@ -523,6 +531,9 @@ class RegexString(BaseDatatype):
     def __repr__(self):
         return 'RE' + pformat(self.value.pattern)
 
+    def CALL(self):
+        return not self.value, Boolean
+
     def EQ(self, other):
         mdc_assert(self, other, String, 'EQ')
         a = self.value.match(other.value)
@@ -546,6 +557,9 @@ class Timedelta(BaseDatatype):
 
     def __repr__(self):
         return str(self.value)
+
+    def CALL(self):
+        return not self.value, Boolean
 
     def ADD(self, other):
         mdc_assert(self, other, (Date, Timedelta), 'SUB')
@@ -584,6 +598,9 @@ class Date(BaseDatatype):
     def __repr__(self):
         return str(self.value)
 
+    def CALL(self):
+        return not self.value, Boolean
+
     def ADD(self, other):
         mdc_assert(self, other, (Date, Timedelta), 'SUB')
         return self.value + other.value, Timedelta
@@ -612,10 +629,10 @@ class Slice(BaseDatatype):
         return self.display()
 
     def display(self):
-        return '(' + ':'.join([str(a) for a in self.value]) + ')'
+        return '[' + ':'.join([str(a) for a in self.value]) + ']'
 
     def make_slice(self, value):
-        value = value.strip('()')
+        value = value.strip('[]')
         if ':' in value:
             value = value.split(':')
         else:
@@ -692,13 +709,15 @@ class Arglist(BaseDatatype):
         return self.display()
 
     def display(self):
-        return '(' + ', '.join([' '.join(a) for a in self.value]) + (',' if len(self.value) == 1 else '') + ')'
+        return '[' + ', '.join([' '.join(a) for a in self.value]) + (',' if len(self.value) == 1 else '') + ']'
 
     def make_arglist(self, value):
-        value = value.strip('()')
+        value = value.strip('[]')
         newvalue = []
         optionals = False
         for a in value.split(','):
+            if not a.strip():
+                continue
             line = []
             a = a.strip()
             if a.endswith('*'):
@@ -772,14 +791,7 @@ class Array(BaseDatatype):
         super().__init__(self.value)
 
     def __repr__(self):
-        return self.__str__()
-        return '[' + ', '.join(
-            (type(a).__name__ + '(' + pformat(a) + ')')
-            if isinstance(a, builtin_types) else pformat(a)
-            for a in self.value) + ']'
-
-    def __str__(self):
-        return '[' + ', '.join(pformat(a) for a in self.value) + ']'
+        return '(' + ', '.join(pformat(a) for a in self.value) + ')'
 
     def __bool__(self):
         return bool(self.value)
@@ -835,6 +847,9 @@ class Null(BaseDatatype):
 
     def __bool__(self):
         return False
+
+    def CALL(self):
+        return True, Boolean
 
     def ADD(self, other):
         return other.value, type(other)
@@ -1184,7 +1199,7 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
             optionals = False
             for b in arguments:
                 for c in b:
-                    if c not in types and not c == '*' and not c == '@':
+                    if c not in types and not c == '*':
                         call_error(pformat(c) + ' is not defined as a type.', 'attr')
                 if '*' in b:
                     optionals = True
@@ -1449,7 +1464,7 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
             k = 0
             while k < len(key):
                 if k + 1 < len(key):
-                    if key[k + 1] in reserved_names:
+                    if key[k + 1] in reserved_names and len(key) < 2:
                         call_error('Invalid variable name. Variable names can not be reserved names.', 'var')
                     if not re.match('^[a-zA-Z]+$', key[k + 1]) and key[k + 1]:
                         call_error('Invalid variable name, variable names must fit this REGEX expression: ^[a-zA-Z]+$', 'var')
@@ -1486,6 +1501,7 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                     call_error('Attribute "value" of type "' + type(local_vars[key[0]]).__name__ + '" is a readonly value.',
                         'readonly')
                 if isinstance(value, (Function, BuiltinFunction)):
+                    value.data['name'] = key[1]
                     value.name = key[1]
                 if oper == '+:':
                     value = do_action(local_vars[key[0]].data[key[1]], 'ADD', value, error=code[i])
@@ -1500,6 +1516,7 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                 if oper != ':' and key[0] not in local_vars:
                     call_error('Undefined Token: ' + pformat(key[0]), 'syntax', code[i])
                 if isinstance(value, (Function, BuiltinFunction)):
+                    value.data['name'] = key[0]
                     value.name = key[0]
                 if oper == '+:':
                     value = do_action(local_vars[key[0]], 'ADD', value, error=code[i])
@@ -1679,7 +1696,7 @@ def translate_datatypes(dt, dotuple=True, error_on_fail=True):
     return dt
 
 
-def eval_datatypes(exp, error=None, dostrings=False):
+def pre_evaluate(exp, error=None, dostrings=False):
     if not exp:
         return exp
     new = [a for a in exp]
@@ -1692,6 +1709,20 @@ def eval_datatypes(exp, error=None, dostrings=False):
             new[a] = datatypes_switch[type(new[a])](new[a])
         if not isinstance(new[a], str):
             pass
+        elif new[a] == '.':
+            if a - 1 < 0:
+                call_error('Cannot get attribute from NULL. (Missing value before `.`)', 'argerr', error)
+            if a + 1 >= len(new):
+                call_error('Missing argument to retrieve from "' + new[a - 1] + '".', 'argerr', error)
+            new[a - 1] = evaluate([new[a - 1]], error=error)
+            try:
+                old = new[a - 1]
+                new[a - 1] = new[a - 1].data[new[a + 1]]
+            except KeyError:
+                call_error('Variable ' + pformat(exp[a - 1]) + ' does not have attribute ' + pformat(new[a + 1]) + '.', 'attr', error)
+            del new[a]
+            del new[a]
+            a -= 1
         elif re.match('^RE(\'|").+(\'|")', new[a]): # Is new[a] a Regex String? If so, assign Regex() class.
             try:
                 new[a] = RegexString(ast.literal_eval(new[a][2:]))
@@ -1708,9 +1739,9 @@ def eval_datatypes(exp, error=None, dostrings=False):
             new[a] = Float(float(new[a]))
         elif re.match('^(-|\+)*[0-9]+$', new[a]): # Is new[a] an integer? If so, assign Integer() class.
             new[a] = Integer(int(new[a]))
-        elif new[a] in ('TRUE', 'FALSE', 'True', 'False'): # Is new[a] a boolean? If so, assign Boolean() class.
+        elif new[a] in ('TRUE', 'FALSE', 'true', 'false'): # Is new[a] a boolean? If so, assign Boolean() class.
             new[a] = Boolean(bool(new[a]))
-        elif new[a] in ('null', 'NULL', 'None'): # Is new[a] null? If so, assign Null() class.
+        elif new[a] in ('null', 'NULL'): # Is new[a] null? If so, assign Null() class.
             new[a] = Null()
         a += 1
     return new
@@ -1727,7 +1758,7 @@ def evaluate_line(oldline, start, end=None, error=None, args=None):
     return oldline
 
 
-def evaluate(exp, error=None, args=None, funcargs=False, has_breadcrumbs=True):
+def evaluate(exp, error=None, args=None, funcargs=False, has_breadcrumbs=True, func_self=True):
     global current_file
     global current_code
     global current_line
@@ -1746,7 +1777,7 @@ def evaluate(exp, error=None, args=None, funcargs=False, has_breadcrumbs=True):
         '|': 'INDEX',
     }
     new = [a for a in exp]
-    new = eval_datatypes(new, error=error)
+    new = pre_evaluate(new, error=error)
     a = 0
     while a < len(new):
         if isinstance(new[a], datatypes + (type(None),)) and not (
@@ -1803,20 +1834,6 @@ def evaluate(exp, error=None, args=None, funcargs=False, has_breadcrumbs=True):
             del new[a + 1]
             del new[a - 1]
             a += 1
-        elif new[a] == '.':
-            if a - 1 < 0:
-                call_error('Cannot get attribute from NULL. (Missing value before `.`)', 'argerr', error)
-            if a + 1 >= len(new):
-                call_error('Missing argument to retrieve from "' + new[a - 1] + '".', 'argerr', error)
-            new[a - 1] = evaluate([new[a - 1]], args=args, error=error)
-            try:
-                old = new[a - 1]
-                new[a - 1] = new[a - 1].data[new[a + 1]]
-            except KeyError:
-                call_error('Variable ' + pformat(exp[a - 1]) + ' does not have attribute ' + pformat(new[a + 1]) + '.', 'attr', error)
-            del new[a]
-            del new[a]
-            a -= 1
         elif new[a] == '!':
             if a + 1 >= len(new):
                 call_error('CALL requires a right hand argument.', 'argerr', error)
@@ -1843,7 +1860,8 @@ def evaluate(exp, error=None, args=None, funcargs=False, has_breadcrumbs=True):
                         + ' positional argument' + ('' if len(new[a].args[i]) == 1 else 's') + '.', 'argerr')
                 if '@' not in new[a].args[i]:
                     local_vars[new[a].args[i][0]] = f[i]
-            local_vars['self'] = new[a]
+            if func_self:
+                local_vars['self'] = new[a]
             new[a] = new[a].CALL(f)
             local_vars = deepcopy(oldlocals)
             del new[a + 1:]
@@ -1942,11 +1960,11 @@ def evaluate(exp, error=None, args=None, funcargs=False, has_breadcrumbs=True):
             new[a] = new[a][6:-7]
             b = new[a].split('\n\\')
             new[a] = eval_statement(b[0], args, b[1])
-        elif (new[a].startswith('[') or new[a].endswith(']')) and not new[a].startswith('args['):
-            if not new[a].startswith('['):
-                call_error('Unmatched ' + pformat(']') + '.', 'syntax', error)
-            if not new[a].endswith(']'):
-                call_error('Unmatched ' + pformat('[') + '.', 'syntax', error)
+        elif new[a].startswith('(') or new[a].endswith(')'):
+            if not new[a].startswith('('):
+                call_error('Unmatched ' + pformat(')') + '.', 'syntax', error)
+            if not new[a].endswith(')'):
+                call_error('Unmatched ' + pformat('(') + '.', 'syntax', error)
             values = evaluate(replacekeys(loader.tokenise(new[a][1:-1].strip()), args=args), error=error, args=args)
             if isinstance(values, (tuple, list)):
                 new[:a + 1:] = values
@@ -1990,11 +2008,11 @@ def evaluate(exp, error=None, args=None, funcargs=False, has_breadcrumbs=True):
                 new[a] = Null()
             elif len(value) == 1:
                 new[a] = value[0]
-        elif new[a].startswith('(') or new[a].endswith(')'):
-            if not new[a].startswith('('):
-                call_error('Unmatched ' + pformat('(') + '.', 'syntax')
-            if not new[a].endswith(')'):
-                call_error('Unmatched ' + pformat(')') + '.', 'syntax')
+        elif new[a].startswith('[') or new[a].endswith(']'):
+            if not new[a].startswith('['):
+                call_error('Unmatched ' + pformat(']') + '.', 'syntax')
+            if not new[a].endswith(']'):
+                call_error('Unmatched ' + pformat('[') + '.', 'syntax')
             b = [z.strip() for z in new[a][1:-1].split(':') if z.strip()]
             if not b:
                 new[a] = Arglist(new[a])
@@ -2190,6 +2208,21 @@ class BFList:
             if args[0].value < len(global_args):
                 return global_args[args[0].value]
         return Array(global_args)
+
+    @staticmethod
+    def get_data(args):
+        if isinstance(args[0], datatypes):
+            n = Null()
+            n.data['value'] = '{'
+            n.value = '{'
+            for a in list(args[0].data.keys()):
+                n.data[a] = args[0].data[a]
+                n.data['value'] += a + ': ' + pformat(args[0].data[a]) + ', '
+                n.value += a + ': ' + pformat(args[0].data[a]) + ', '
+            n.data['value'] = n.data['value'][:-2] + '}'
+            n.value = n.value[:-2] + '}'
+            return n
+        return Null()
 
 
 #
@@ -2411,6 +2444,9 @@ local_vars = CompactDict({
     'ARGV': BuiltinFunction('ARGV',
         [[Integer, '*']],
         BFList.get_argv),
+    'GETDATA': BuiltinFunction('GETDATA',
+        [['@']],
+        BFList.get_data),
 
     'NOT': BuiltinFunction('NOT',
         [['@']],

@@ -1,0 +1,18 @@
+ERRORTAG 'notimplemented' 'FEATURE NOT IMPLEMENTED';
+errtype : 'notimplemented';
+errtext : 'The Thread type and threading functions have not been implemented yet,
+ and will be implemented after this programming language becomes object oriented.';
+RAISE errtype errtext;
+
+EXAMPLES:
+
+To make a thread:  newthread : THREAD { ECHO 'hi.'; ECHO 'hey.'; ECHO 'hello.'; };
+: Argument 1 must be code block.
+: Argument 2 is optional, but must evaluate to Boolean. [Default TRUE];
+- If second argument is TRUE, the Thread will be a daemon Thread.
+- A daemon Thread stops when the main program stops, but a
+  daemon Thread will continue until the code is completed.
+
+To start a thread: threading.StartThread newthread;
+
+To stop a thread:  threading.StopThread newthread;

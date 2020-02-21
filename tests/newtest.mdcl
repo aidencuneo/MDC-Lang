@@ -1,7 +1,20 @@
 'Welcome to this really cool game!';
 "\n";
 
-sticks : 0;
+bag : NULL;
+bag.sticks : 0;
+bag.rocks : 0;
+
+bag.showInv : [] => {
+    s : '';
+    IF bag.sticks : {
+        s+: '-> Sticks : ' + bag.sticks + "\n"};
+    IF bag.rocks : {
+        s+: '-> Rocks : ' + bag.rocks + "\n"};
+    IF !s : {
+        s : "You have no items.\n"};
+    s;
+};
 
 WHILE 1 : {
     i : '';
@@ -12,11 +25,14 @@ WHILE 1 : {
         BREAK;
     };
 
-    IF i = '0' : {
-        sticks +: 1;
+    IF i = 'stick' : {
+        bag.sticks +: 1;
         !ECHO 'Collected stick.';
+    } : ELIF i = 'rock' : {
+        bag.rocks +: 1;
+        !ECHO 'Collected rock.';
     } : ELIF i = 'bag' : {
-        !ECHO 'Sticks: ' + sticks;
+        !bag.showInv;
     } : ELIF i = 'exit' : {
         !ECHO 'Goodbye.';
         BREAK;
