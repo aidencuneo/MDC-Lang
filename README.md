@@ -1,4 +1,4 @@
-# MDC Lang
+# MDCL Interpreter
 
 ## Built-in Regex Strings
 

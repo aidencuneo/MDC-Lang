@@ -1015,7 +1015,7 @@ def initialise_path(src_path, local_path):
         call_error('Your installation of MDCL is missing a required library at path: "'
             + os.path.abspath(src_path + '/startup.mdcl') + '". Please re-install or repair '
             'your installation. Exports are currently located at: '
-            'https://github.com/aidencuneo/MDC-Lang', 'fatal')
+            'https://github.com/aidencuneo/MDCL-Interpreter/tree/master/dist', 'fatal')
     with open(src_path + '/startup.mdcl') as f:
         code = f.read()
     start(code)
