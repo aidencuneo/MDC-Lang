@@ -1,0 +1,20 @@
+Version 0 was way back when MDCL was MDC and it only really held and printed
+variable data within it. (It's now called MDCL because L stands for Language).
+
+Version 1:
+    MDCL Interpreter, written in Python.
+
+Version 2:
+    MDCL Compiler, written in Python.
+    Compiles to ______ (insert later when I've decided)
+
+Version 3:
+    MDCL Compiler, written in MDCL.
+    Crazy, right?
+    This version will be written in MDCL and compile into something that can
+    be executed without MDCL.
+    So from this point on, MDCL will all be written in itself.
+
+MDCL will probably change it's name gradually over time, and it will change
+a lot as a language, maybe drastically, maybe only a little bit. But it'll
+still change.
