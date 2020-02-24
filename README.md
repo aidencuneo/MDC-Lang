@@ -30,12 +30,19 @@ List of current keywords:
 There are shorthands for most keywords, which include the following:
 
 `+` - ADD
+
 `-` - SUB
+
 `*` - MULT
+
 `/` - DIV
+
 `^` - PWR
+
 `%` - MOD
+
 `=` - EQ
+
 `|` - INDEX
 
 Putting the `ADD` keyword (or just `+`) between two Integers will add both
@@ -43,7 +50,7 @@ Integers together, and return the result as an Integer:
 
     63 + 17;
 
-    -> `80`
+    -> 80
 
 A more complex example would be using two Strings with the `DIV` keyword
 (or `/`) to count how many times the right hand String occurs in the
@@ -51,7 +58,7 @@ left hand String:
 
     'the cat sat on the mat' / 'the';
 
-    -> `2`
+    -> 2
 
 ## Datatypes
 
