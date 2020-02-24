@@ -855,7 +855,7 @@ class Null(BaseDatatype):
         return other.value, type(other)
 
     def SUB(self, other):
-        mdc_assert(self, other, (Integer, Float, String, Boolean, Array, Null))
+        mdc_assert(self, other, (Integer, Float, String, Boolean, Array, Null), 'SUB')
         if isinstance(other, (Integer, Float)):
             return - other.value, type(other)
         if isinstance(other, String):
@@ -1850,6 +1850,8 @@ def evaluate(exp, error=None, args=None, funcargs=False, has_breadcrumbs=True, f
                 continue
             f = as_tuple(evaluate(new[a + 1:], error=error, args=args, funcargs=True))
             oldlocals = deepcopy(local_vars)
+            if func_self:
+                local_vars['self'] = new[a]
             for i in range(len(new[a].args)):
                 if not new[a].args[i]:
                     continue
@@ -1860,8 +1862,6 @@ def evaluate(exp, error=None, args=None, funcargs=False, has_breadcrumbs=True, f
                         + ' positional argument' + ('' if len(new[a].args[i]) == 1 else 's') + '.', 'argerr')
                 if '@' not in new[a].args[i]:
                     local_vars[new[a].args[i][0]] = f[i]
-            if func_self:
-                local_vars['self'] = new[a]
             new[a] = new[a].CALL(f)
             local_vars = deepcopy(oldlocals)
             del new[a + 1:]
@@ -2216,11 +2216,11 @@ class BFList:
             n.data['value'] = '{'
             n.value = '{'
             for a in list(args[0].data.keys()):
-                n.data[a] = args[0].data[a]
-                n.data['value'] += a + ': ' + pformat(args[0].data[a]) + ', '
-                n.value += a + ': ' + pformat(args[0].data[a]) + ', '
-            n.data['value'] = n.data['value'][:-2] + '}'
-            n.value = n.value[:-2] + '}'
+                b = a + ': ' + pformat(args[0].data[a]) + ', '
+                n.data['value'] += b
+                n.value += b
+            n.data['value'] = String(n.data['value'][:-2] + '}')
+            n.value = String(n.value[:-2] + '}')
             return n
         return Null()
 
