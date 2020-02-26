@@ -6,7 +6,7 @@ First Commit was at: 1/1/2020.
 '''
 
 _debug_mode = True
-__version__ = '1.5.6'
+__version__ = '1.5.7'
 
 import ast
 import datetime
@@ -76,32 +76,30 @@ class BaseDatatype:
     def do_action(self, action, args):
         if action in self.data:
             f = self.data[action]
-        elif action == 'ADD':
-            f = self.ADD
-        elif action == 'SUB':
-            f = self.SUB
-        elif action == 'MULT':
-            f = self.MULT
-        elif action == 'DIV':
-            f = self.DIV
-        elif action == 'PWR':
-            f = self.PWR
-        elif action == 'MOD':
-            f = self.MOD
-        elif action == 'EQ':
-            f = self.EQ
-        elif action == 'LT':
-            f = self.LT
-        elif action == 'GT':
-            f = self.GT
-        elif action == 'LE':
-            f = self.LE
-        elif action == 'GE':
-            f = self.GE
-        elif action == 'INDEX':
-            f = self.INDEX
-        elif action == 'HAS':
-            f = self.HAS
+        elif action == 'add':
+            f = self.add
+        elif action == 'sub':
+            f = self.sub
+        elif action == 'mult':
+            f = self.mult
+        elif action == 'div':
+            f = self.div
+        elif action == 'pwr':
+            f = self.pwr
+        elif action == 'mod':
+            f = self.mod
+        elif action == 'eq':
+            f = self.eq
+        elif action == 'lt':
+            f = self.lt
+        elif action == 'gt':
+            f = self.gt
+        elif action == 'le':
+            f = self.le
+        elif action == 'ge':
+            f = self.ge
+        elif action == 'has':
+            f = self.has
         else:
             raise AttributeError
         if isinstance(f, (Function, BuiltinFunction)):
@@ -157,7 +155,7 @@ class Function(BaseDatatype):
                 'maximum amount for this Function is ' + str(len(self.args)) + '.', 'argerr')
         return args
 
-    def CALL(self, args, ex_args=None):
+    def call(self, args, ex_args=None):
         if isinstance(args, Array):
             args = args.value
         args = self.check_args(args)
@@ -174,7 +172,7 @@ class Function(BaseDatatype):
 
 class BuiltinFunction(Function):
 
-    def CALL(self, args, ex_args=None):
+    def call(self, args, ex_args=None):
         if isinstance(args, Array):
             args = args.value
         args = self.check_args(args)
@@ -191,7 +189,7 @@ class Integer(BaseDatatype):
                 value = value[0]
         mdc_assert(self, value, (int, float) + (
             Integer, Float, String, Boolean, Null),
-            'INTEGER', showname=False)
+            'int', showname=False)
         if isinstance(value, int):
             self.value = value
         elif isinstance(value, float):
@@ -218,22 +216,22 @@ class Integer(BaseDatatype):
     def __bool__(self):
         return bool(self.value)
 
-    def CALL(self):
+    def call(self):
         return not self.value, Boolean
 
-    def ADD(self, other):
-        mdc_assert(self, other, (Integer, Float, String), 'ADD')
+    def add(self, other):
+        mdc_assert(self, other, (Integer, Float, String), 'add')
         if isinstance(other, (Integer, Float)):
             return self.value + other.value, type(other)
         if isinstance(other, String):
             return str(self.value) + other.value, String
 
-    def SUB(self, other):
-        mdc_assert(self, other, (Integer, Float), 'SUB')
+    def sub(self, other):
+        mdc_assert(self, other, (Integer, Float), 'sub')
         return self.value - other.value, type(other)
 
-    def MULT(self, other):
-        mdc_assert(self, other, (Integer, Float, String, Boolean), 'SUB')
+    def mult(self, other):
+        mdc_assert(self, other, (Integer, Float, String, Boolean), 'mult')
         if isinstance(other, (Integer, Float)):
             return self.value * other.value, type(other)
         if isinstance(other, String):
@@ -241,29 +239,29 @@ class Integer(BaseDatatype):
         if isinstance(other, Boolean):
             return self.value * other.value.value, Integer
 
-    def DIV(self, other):
-        mdc_assert(self, other, (Integer, Float, Boolean), 'DIV')
+    def div(self, other):
+        mdc_assert(self, other, (Integer, Float, Boolean), 'div')
         if isinstance(other, (Integer, Float)):
             return self.value / other.value, type(other)
         if isinstance(other, Boolean):
             return self.value * int(not other.value.value), Integer
 
-    def PWR(self, other):
-        mdc_assert(self, other, (Integer, Float, Boolean), 'PWR')
+    def pwr(self, other):
+        mdc_assert(self, other, (Integer, Float, Boolean), 'pwr')
         if isinstance(other, (Integer, Float)):
             return self.value ** other.value, type(other)
         if isinstance(other, Boolean):
             return self.value ** other.value.value, Integer
 
-    def MOD(self, other):
-        mdc_assert(self, other, (Integer, Float, Boolean), 'MOD')
+    def mod(self, other):
+        mdc_assert(self, other, (Integer, Float, Boolean), 'mod')
         if isinstance(other, (Integer, Float)):
             return self.value % other.value, type(other)
         if isinstance(other, Boolean):
             return self.value % other.value.value, Integer
 
-    def EQ(self, other):
-        mdc_assert(self, other, (Integer, Float, String, Boolean), 'EQ')
+    def eq(self, other):
+        mdc_assert(self, other, (Integer, Float, String, Boolean), 'eq')
         if isinstance(other, (Integer, Float)):
             return self.value == other.value, Boolean
         if isinstance(other, String):
@@ -271,8 +269,8 @@ class Integer(BaseDatatype):
         if isinstance(other, Boolean):
             return self.value == other.value.value, Boolean
 
-    def LT(self, other):
-        mdc_assert(self, other, (Integer, Float, String, Boolean), 'LT')
+    def lt(self, other):
+        mdc_assert(self, other, (Integer, Float, String, Boolean), 'lt')
         if isinstance(other, (Integer, Float)):
             return self.value < other.value, Boolean
         if isinstance(other, String):
@@ -280,8 +278,8 @@ class Integer(BaseDatatype):
         if isinstance(other, Boolean):
             return self.value < other.value.value, Boolean
 
-    def GT(self, other):
-        mdc_assert(self, other, (Integer, Float, String, Boolean), 'GT')
+    def gt(self, other):
+        mdc_assert(self, other, (Integer, Float, String, Boolean), 'gt')
         if isinstance(other, (Integer, Float)):
             return self.value > other.value, Boolean
         if isinstance(other, String):
@@ -289,8 +287,8 @@ class Integer(BaseDatatype):
         if isinstance(other, Boolean):
             return self.value > other.value.value, Boolean
 
-    def LE(self, other):
-        mdc_assert(self, other, (Integer, Float, String, Boolean), 'LE')
+    def le(self, other):
+        mdc_assert(self, other, (Integer, Float, String, Boolean), 'le')
         if isinstance(other, (Integer, Float)):
             return self.value <= other.value, Boolean
         if isinstance(other, String):
@@ -298,8 +296,8 @@ class Integer(BaseDatatype):
         if isinstance(other, Boolean):
             return self.value <= other.value.value, Boolean
 
-    def GE(self, other):
-        mdc_assert(self, other, (Integer, Float, String, Boolean), 'GE')
+    def ge(self, other):
+        mdc_assert(self, other, (Integer, Float, String, Boolean), 'ge')
         if isinstance(other, (Integer, Float)):
             return self.value >= other.value, Boolean
         if isinstance(other, String):
@@ -316,7 +314,7 @@ class Float(BaseDatatype):
                 value = value[0]
         mdc_assert(self, value, (int, float) + (
             Integer, Float, String, Boolean, Null),
-            'FLOAT', showname=False)
+            'float', showname=False)
         if isinstance(value, int):
             self.value = float(value)
         if isinstance(value, float):
@@ -343,40 +341,40 @@ class Float(BaseDatatype):
     def __bool__(self):
         return bool(self.value)
 
-    def CALL(self):
+    def call(self):
         return not self.value, Boolean
 
-    def ADD(self, other):
-        mdc_assert(self, other, (Integer, Float), 'ADD')
+    def add(self, other):
+        mdc_assert(self, other, (Integer, Float), 'add')
         return self.value + other.value, Float
 
-    def SUB(self, other):
-        mdc_assert(self, other, (Integer, Float), 'SUB')
+    def sub(self, other):
+        mdc_assert(self, other, (Integer, Float), 'sub')
         return self.value - other.value, Float
 
-    def MULT(self, other):
-        mdc_assert(self, other, (Integer, Float, Boolean), 'SUB')
+    def mult(self, other):
+        mdc_assert(self, other, (Integer, Float, Boolean), 'sub')
         if isinstance(other, (Integer, Float)):
             return self.value * other.value, Float
         if isinstance(other, Boolean):
             return self.value * other.value.value, Integer
 
-    def DIV(self, other):
-        mdc_assert(self, other, (Integer, Float, Boolean), 'DIV')
+    def div(self, other):
+        mdc_assert(self, other, (Integer, Float, Boolean), 'div')
         if isinstance(other, (Integer, Float)):
             return self.value / other.value, Float
         if isinstance(other, Boolean):
             return self.value * int(not other.value.value), Integer
 
-    def PWR(self, other):
-        mdc_assert(self, other, (Integer, Float, Boolean), 'PWR')
+    def pwr(self, other):
+        mdc_assert(self, other, (Integer, Float, Boolean), 'pwr')
         if isinstance(other, (Integer, Float)):
             return self.value ** other.value, Float
         if isinstance(other, Boolean):
             return self.value ** other.value.value, Integer
 
-    def EQ(self, other):
-        mdc_assert(self, other, (Integer, Float, String, Boolean), 'EQ')
+    def eq(self, other):
+        mdc_assert(self, other, (Integer, Float, String, Boolean), 'eq')
         if isinstance(other, (Integer, Float)):
             return self.value == other.value, Boolean
         if isinstance(other, String):
@@ -384,8 +382,8 @@ class Float(BaseDatatype):
         if isinstance(other, Boolean):
             return self.value == other.value.value, Boolean
 
-    def LT(self, other):
-        mdc_assert(self, other, (Integer, Float, String, Boolean), 'LT')
+    def lt(self, other):
+        mdc_assert(self, other, (Integer, Float, String, Boolean), 'lt')
         if isinstance(other, (Integer, Float)):
             return self.value < other.value, Boolean
         if isinstance(other, String):
@@ -393,8 +391,8 @@ class Float(BaseDatatype):
         if isinstance(other, Boolean):
             return self.value < other.value.value, Boolean
 
-    def GT(self, other):
-        mdc_assert(self, other, (Integer, Float, String, Boolean), 'GT')
+    def gt(self, other):
+        mdc_assert(self, other, (Integer, Float, String, Boolean), 'gt')
         if isinstance(other, (Integer, Float)):
             return self.value > other.value, Boolean
         if isinstance(other, String):
@@ -402,8 +400,8 @@ class Float(BaseDatatype):
         if isinstance(other, Boolean):
             return self.value > other.value.value, Boolean
 
-    def LE(self, other):
-        mdc_assert(self, other, (Integer, Float, String, Boolean), 'LE')
+    def le(self, other):
+        mdc_assert(self, other, (Integer, Float, String, Boolean), 'le')
         if isinstance(other, (Integer, Float)):
             return self.value <= other.value, Boolean
         if isinstance(other, String):
@@ -411,8 +409,8 @@ class Float(BaseDatatype):
         if isinstance(other, Boolean):
             return self.value <= other.value.value, Boolean
 
-    def GE(self, other):
-        mdc_assert(self, other, (Integer, Float, String, Boolean), 'GE')
+    def ge(self, other):
+        mdc_assert(self, other, (Integer, Float, String, Boolean), 'ge')
         if isinstance(other, (Integer, Float)):
             return self.value >= other.value, Boolean
         if isinstance(other, String):
@@ -428,7 +426,7 @@ class String(BaseDatatype):
             if len(value) == 1:
                 value = value[0]
         mdc_assert(self, value, (str,) + datatypes,
-            'STRING', showname=False)
+            'string', showname=False)
         if isinstance(value, str):
             self.value = value
         elif isinstance(value, (Integer, Float, String, Null)):
@@ -436,7 +434,7 @@ class String(BaseDatatype):
         elif isinstance(value, RegexString):
             self.value = str(value.value.pattern)
         elif isinstance(value, Boolean):
-            self.value = 'TRUE' if value.value.value else 'FALSE'
+            self.value = 'true' if value.value.value else 'false'
         elif isinstance(value, builtin_types):
             self.value = str(value.value)
         elif isinstance(value, datatypes):
@@ -449,11 +447,11 @@ class String(BaseDatatype):
     def __str__(self):
         return self.value
 
-    def CALL(self):
+    def call(self):
         return not self.value, Boolean
 
-    def ADD(self, other):
-        mdc_assert(self, other, datatypes, 'ADD')
+    def add(self, other):
+        mdc_assert(self, other, datatypes, 'add')
         if isinstance(other, (Integer, Float)):
             return self.value + str(other.value), String
         if isinstance(other, String):
@@ -462,31 +460,31 @@ class String(BaseDatatype):
             return (self.value,) + other.value, Array
         return str(self.value) + str(other.value), String
 
-    def SUB(self, other):
-        mdc_assert(self, other, (Integer, String), 'SUB')
+    def sub(self, other):
+        mdc_assert(self, other, (Integer, String), 'sub')
         if isinstance(other, Integer):
             return self.value[:-other.value], String
         if isinstance(other, String):
             return self.value.replace(other.value, '', 1), String
 
-    def MULT(self, other):
-        mdc_assert(self, other, (Integer, Boolean), 'MULT')
+    def mult(self, other):
+        mdc_assert(self, other, (Integer, Boolean), 'mult')
         if isinstance(other, Integer):
             return self.value * other.value, String
         if isinstance(other, Boolean):
             return self.value * other.value.value, String
 
-    def DIV(self, other):
-        mdc_assert(self, other, (String, Boolean), 'DIV')
+    def div(self, other):
+        mdc_assert(self, other, (String, Boolean), 'div')
         if isinstance(other, String):
             return self.value.count(other.value), Integer
         if isinstance(other, Boolean):
             return self.value if other.value.value else '', String
 
-    def EQ(self, other):
+    def eq(self, other):
         mdc_assert(self, other, (
             Integer, Float, String, RegexString, Boolean, Null),
-            'EQ')
+            'eq')
         if isinstance(other, Integer):
             return len(self.value) == other.value, Boolean
         if isinstance(other, Float):
@@ -501,16 +499,16 @@ class String(BaseDatatype):
         if isinstance(other, Null):
             return not self.value, Boolean
 
-    def INDEX(self, other):
-        mdc_assert(self, other, Integer, 'INDEX')
+    def index(self, other):
+        mdc_assert(self, other, Integer, 'index')
         a = int(BFList.get_length((self,)).value)
         if int(other.value) > a - 1:
             call_error('String index out of range, ' + str(other) + ' > ' + str(a - 1) + '.',
                 'outofrange')
         return self.value[other.value], String
 
-    def HAS(self, other):
-        mdc_assert(self, other, String, 'HAS')
+    def has(self, other):
+        mdc_assert(self, other, String, 'has')
         if isinstance(other, String):
             return other.value in self.value, Boolean
 
@@ -521,7 +519,7 @@ class RegexString(BaseDatatype):
         if isinstance(value, tuple):
             if len(value) == 1:
                 value = value[0]
-        mdc_assert(self, value, (str, re.Pattern, String), 'REGEX', showname=False)
+        mdc_assert(self, value, (str, re.Pattern, String), 'regex', showname=False)
         if isinstance(value, (str, re.Pattern)):
             self.value = re.compile(value)
         elif isinstance(value, String):
@@ -531,11 +529,11 @@ class RegexString(BaseDatatype):
     def __repr__(self):
         return 'RE' + pformat(self.value.pattern)
 
-    def CALL(self):
+    def call(self):
         return not self.value, Boolean
 
-    def EQ(self, other):
-        mdc_assert(self, other, String, 'EQ')
+    def eq(self, other):
+        mdc_assert(self, other, String, 'eq')
         a = self.value.match(other.value)
         return bool(a) if a else 0, Boolean
 
@@ -546,7 +544,7 @@ class Timedelta(BaseDatatype):
         if isinstance(value, tuple):
             if len(value) == 1:
                 value = value[0]
-        mdc_assert(self, value, (datetime.timedelta, Timedelta, Date, Null), 'TIMEDELTA', showname=False)
+        mdc_assert(self, value, (datetime.timedelta, Timedelta, Date, Null), 'timedelta', showname=False)
         if isinstance(value, datetime.timedelta):
             self.value = value
         elif isinstance(value, Timedelta):
@@ -558,23 +556,23 @@ class Timedelta(BaseDatatype):
     def __repr__(self):
         return str(self.value)
 
-    def CALL(self):
+    def call(self):
         return not self.value, Boolean
 
-    def ADD(self, other):
-        mdc_assert(self, other, (Date, Timedelta), 'SUB')
+    def add(self, other):
+        mdc_assert(self, other, (Date, Timedelta), 'add')
         return self.value + other.value, Timedelta
 
-    def SUB(self, other):
-        mdc_assert(self, other, (Date, Timedelta), 'SUB')
+    def sub(self, other):
+        mdc_assert(self, other, (Date, Timedelta), 'sub')
         return self.value - other.value, Timedelta
 
-    def MULT(self, other):
-        mdc_assert(self, other, (Date, Timedelta), 'MULT')
+    def mult(self, other):
+        mdc_assert(self, other, (Date, Timedelta), 'mult')
         return self.value * other.value, Timedelta
 
-    def DIV(self, other):
-        mdc_assert(self, other, (Date, Timedelta), 'DIV')
+    def div(self, other):
+        mdc_assert(self, other, (Date, Timedelta), 'div')
         return self.value / other.value, Float
 
 
@@ -584,7 +582,7 @@ class Date(BaseDatatype):
         if isinstance(value, tuple):
             if len(value) == 1:
                 value = value[0]
-        mdc_assert(self, value, (datetime.datetime, Timedelta, Date, Null), 'DATE', showname=False)
+        mdc_assert(self, value, (datetime.datetime, Timedelta, Date, Null), 'date', showname=False)
         if isinstance(value, datetime.datetime):
             self.value = value
         elif isinstance(value, Timedelta):
@@ -598,15 +596,15 @@ class Date(BaseDatatype):
     def __repr__(self):
         return str(self.value)
 
-    def CALL(self):
+    def call(self):
         return not self.value, Boolean
 
-    def ADD(self, other):
-        mdc_assert(self, other, (Date, Timedelta), 'SUB')
+    def add(self, other):
+        mdc_assert(self, other, (Date, Timedelta), 'add')
         return self.value + other.value, Timedelta
 
-    def SUB(self, other):
-        mdc_assert(self, other, (Date, Timedelta), 'SUB')
+    def sub(self, other):
+        mdc_assert(self, other, (Date, Timedelta), 'sub')
         return self.value - other.value, Timedelta
 
 
@@ -616,7 +614,7 @@ class Slice(BaseDatatype):
         if isinstance(value, tuple):
             if len(value) == 1:
                 value = value[0]
-        mdc_assert(self, value, (str, String, Slice), 'SLICE', showname=False)
+        mdc_assert(self, value, (str, String, Slice), 'slice', showname=False)
         if isinstance(value, str):
             self.value = self.make_slice(value)
         elif isinstance(value, String):
@@ -638,7 +636,7 @@ class Slice(BaseDatatype):
         else:
             value = (value, value, '')
         if len(value) > 3:
-            call_error('Slice received too many arguments, maximum is 3.', 'argerr')
+            call_error('slice received too many arguments, maximum is 3.', 'argerr')
         while len(value) < 3:
             value += ['']
         if not value[0]:
@@ -650,16 +648,16 @@ class Slice(BaseDatatype):
         try:
             value[0] = int(value[0])
         except ValueError:
-            call_error('Non-Integer value found in position 0 of Slice.', 'value')
+            call_error('Non-Integer value found in position 0 of slice.', 'value')
         try:
             value[1] = int(value[1])
         except ValueError:
             if value[1] != '.':
-                call_error('Non-Integer value found (or missing dot) in position 1 of Slice.', 'value')
+                call_error('Non-Integer value found (or missing dot) in position 1 of slice.', 'value')
         try:
             value[2] = int(value[2])
         except ValueError:
-            call_error('Non-Integer value found in position 2 of Slice.', 'value')
+            call_error('Non-Integer value found in position 2 of slice.', 'value')
         return value
 
     def do_slice(self, obj):
@@ -683,11 +681,11 @@ class Slice(BaseDatatype):
                 return String(newval)
             if isinstance(obj, Array):
                 return Array(newval)
-        if not 'SLICE' in dir(obj):
-            call_error('Datatype ' + type(obj).__name__ + ' does not have a method to deal with SLICE.', 'attr')
-        if isinstance(obj.SLICE, (Function, BuiltinFunction)):
-            return obj.SLICE.CALL((obj, self,))
-        return obj.SLICE(self)
+        if not 'index' in dir(obj):
+            call_error('Datatype ' + type(obj).__name__ + ' does not have an index method to deal with slice.', 'attr')
+        if isinstance(obj.index, (Function, BuiltinFunction)):
+            return obj.index.call((obj, self,))
+        return obj.index(self)
 
 
 class Arglist(BaseDatatype):
@@ -744,7 +742,7 @@ class Boolean(BaseDatatype):
         if isinstance(value, tuple):
             if len(value) == 1:
                 value = value[0]
-        mdc_assert(self, value, (int, str, bool) + builtin_types, 'BOOLEAN', showname=False)
+        mdc_assert(self, value, (int, str, bool) + builtin_types, 'bool', showname=False)
         if isinstance(value, str):
             value = value.lower()
             if value == 'true':
@@ -770,7 +768,7 @@ class Boolean(BaseDatatype):
     def __bool__(self):
         return bool(self.value)
 
-    def CALL(self):
+    def call(self):
         return not self.value, Boolean
 
 
@@ -796,15 +794,15 @@ class Array(BaseDatatype):
     def __bool__(self):
         return bool(self.value)
 
-    def CALL(self):
+    def call(self):
         return not self.value, Boolean
 
-    def ADD(self, other):
-        mdc_assert(self, other, builtin_types, 'ADD')
+    def add(self, other):
+        mdc_assert(self, other, builtin_types, 'add')
         return self.value + (other,), Array
 
-    def SUB(self, other):
-        mdc_assert(self, other, (Integer, String), 'SUB')
+    def sub(self, other):
+        mdc_assert(self, other, (Integer, String), 'sub')
         if isinstance(other, Integer):
             return self.value[:-other.value], Array
         if isinstance(other, String):
@@ -816,20 +814,20 @@ class Array(BaseDatatype):
             self.value = tuple(self.value)
             return self.value, Array
 
-    def MULT(self, other):
-        mdc_assert(self, other, Array, 'MULT')
+    def mult(self, other):
+        mdc_assert(self, other, Array, 'mult')
         return self.value + other.value, Array
 
-    def INDEX(self, other):
-        mdc_assert(self, other, Integer, 'INDEX')
+    def index(self, other):
+        mdc_assert(self, other, Integer, 'index')
         a = int(BFList.get_length((self,)).value)
         if int(other.value) > a - 1:
             call_error('Array index out of range, ' + str(other) + ' > ' + str(a - 1) + '.',
                 'outofrange')
         return self.value[other.value], type(self.value[other.value])
 
-    def HAS(self, other):
-        mdc_assert(self, other, builtin_types, 'HAS')
+    def has(self, other):
+        mdc_assert(self, other, builtin_types, 'has')
         return any(a.value == other.value for a in self.value), Boolean
 
 
@@ -840,22 +838,22 @@ class Null(BaseDatatype):
         super().__init__(self.value)
 
     def __repr__(self):
-        return pformat('NULL')
+        return pformat('null')
 
     def __str__(self):
-        return 'NULL'
+        return 'null'
 
     def __bool__(self):
         return False
 
-    def CALL(self):
+    def call(self):
         return True, Boolean
 
-    def ADD(self, other):
+    def add(self, other):
         return other.value, type(other)
 
-    def SUB(self, other):
-        mdc_assert(self, other, (Integer, Float, String, Boolean, Array, Null), 'SUB')
+    def sub(self, other):
+        mdc_assert(self, other, (Integer, Float, String, Boolean, Array, Null), 'sub')
         if isinstance(other, (Integer, Float)):
             return - other.value, type(other)
         if isinstance(other, String):
@@ -867,20 +865,20 @@ class Null(BaseDatatype):
         if isinstance(other, Null):
             return None, Null
 
-    def MULT(self, other):
+    def mult(self, other):
         return None, Null
 
-    def DIV(self, other):
+    def div(self, other):
         return None, Null
 
-    def PWR(self, other):
+    def pwr(self, other):
         return None, Null
 
-    def MOD(self, other):
+    def mod(self, other):
         return None, Null
 
-    def EQ(self, other):
-        mdc_assert(self, other, builtin_types, 'EQ')
+    def eq(self, other):
+        mdc_assert(self, other, builtin_types, 'eq')
         if isinstance(other, (Integer, Float, String, Array)):
             return not other.value, Boolean
         if isinstance(other, RegexString):
@@ -891,8 +889,8 @@ class Null(BaseDatatype):
             return True, Boolean
         return not other.value, Boolean
 
-    def LT(self, other):
-        mdc_assert(self, other, builtin_types, 'LT')
+    def lt(self, other):
+        mdc_assert(self, other, builtin_types, 'lt')
         if isinstance(other, (Integer, Float)):
             return 0 < other.value, Boolean
         if isinstance(other, (String, Array)):
@@ -905,8 +903,8 @@ class Null(BaseDatatype):
             return False, Boolean
         return bool(other.value), Boolean
 
-    def GT(self, other):
-        mdc_assert(self, other, builtin_types, 'GT')
+    def gt(self, other):
+        mdc_assert(self, other, builtin_types, 'gt')
         if isinstance(other, (Integer, Float)):
             return 0 > other.value, Boolean
         if isinstance(other, (String, Array)):
@@ -919,14 +917,14 @@ class Null(BaseDatatype):
             return False, Boolean
         return not other.value, Boolean
 
-    def LE(self, other):
-        mdc_assert(self, other, builtin_types, 'LE')
+    def le(self, other):
+        mdc_assert(self, other, builtin_types, 'le')
         if isinstance(other, (Integer, Float)):
             return 0 <= other.value, Boolean
         return True, Boolean
 
-    def GE(self, other):
-        mdc_assert(self, other, builtin_types, 'GE')
+    def ge(self, other):
+        mdc_assert(self, other, builtin_types, 'ge')
         if isinstance(other, (Integer, Float)):
             return 0 >= other.value, Boolean
         if isinstance(other, (String, Array)):
@@ -939,10 +937,10 @@ class Null(BaseDatatype):
             return False, Boolean
         return not other.value, Boolean
 
-    def INDEX(self, other):
+    def index(self, other):
         return None, Null
 
-    def HAS(self, other):
+    def has(self, other):
         return False, Boolean
 
 
@@ -1189,7 +1187,7 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
         if not a:
             i += 1
             continue
-        elif a[0] == 'NEW':
+        elif a[0] == 'new':
             if len(a) < 4 or ':' not in a:
                 call_error('Datatype declaration requires at least a datatype name, initialisation code, and the ":" separator.', 'argerr')
             name = a[1]
@@ -1212,10 +1210,10 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
             actions = {b[1:] : local_vars[b] for b in local_vars
                 if isinstance(local_vars[b], (Function, BuiltinFunction))
                 and b[0] == '!'
-                and b[1:] in mdcl_keywords + ('ECHO',)
+                and b[1:] in mdcl_keywords + ('echo',)
             }
-            if 'ECHO' not in actions:
-                call_error('Datatype is missing an ECHO function.', 'attr')
+            if 'echo' not in actions:
+                call_error('Datatype is missing an echo function.', 'attr')
             for a in actions:
                 setattr(this, a, actions[a])
             def __init__(self, args):
@@ -1227,7 +1225,7 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                 })
             def __repr__(self):
                 try:
-                    return pformat(actions['ECHO'].CALL(self))
+                    return pformat(actions['echo'].call(self))
                 except RecursionError:
                     raise e
             this.__init__ = __init__
@@ -1237,45 +1235,45 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
             del this
             del __init__
             del __repr__
-        elif a[0] == 'IF':
+        elif a[0] == 'if':
             if len(a) < 3 or ':' not in a:
-                call_error('IF statement requires at least a condition, the ":" separator, and code to run.', 'syntax')
+                call_error('If statement requires at least a condition, the ":" separator, and code to run.', 'syntax')
             contents = tuple(filter(None, split_list(a[1:], ':')))
             if not contents[1:]:
-                call_error('IF statement requires at least a condition, the ":" separator, and code to run.', 'syntax')
+                call_error('If statement requires at least a condition, the ":" separator, and code to run.', 'syntax')
             conditions = [contents[0]]
             runcodes = [contents[1]]
             haselse = False
             con = contents[2:]
             b = 0
             while b < len(con):
-                if con[b][0] == 'IF':
-                    call_error('IF can not be placed after ELIF or ELSE in the same chain.', 'syntax')
-                elif con[b][0] == 'ELIF':
+                if con[b][0] == 'if':
+                    call_error('If can not be placed after elif or else in the same chain.', 'syntax')
+                elif con[b][0] == 'elif':
                     if len(con[b]) < 2 or b + 1 >= len(con):
-                        call_error('ELIF statement requires at least a condition, the ":" separator, and code to run.', 'syntax')
+                        call_error('Elif statement requires at least a condition, the ":" separator, and code to run.', 'syntax')
                     if haselse:
-                        call_error('ELIF can not be placed after ELSE in the same chain.', 'syntax')
+                        call_error('Elif can not be placed after else in the same chain.', 'syntax')
                     conditions += [con[b][1:]]
                     runcodes += [con[b + 1]]
                     b += 1
-                elif con[b][0] == 'ELSE':
+                elif con[b][0] == 'else':
                     haselse = True
                     if b + 1 >= len(con):
-                        call_error('ELSE statement requires at least the ":" separator and code to run.', 'syntax')
+                        call_error('Else statement requires at least the ":" separator and code to run.', 'syntax')
                     if len(con[b]) > 1:
-                        call_error('ELSE statement can not have any conditions, use the ELIF statement to evaluate conditions.', 'syntax')
-                    conditions += ['ELSE']
+                        call_error('Else statement can not have any conditions, use the elif statement to evaluate conditions.', 'syntax')
+                    conditions += ['else']
                     runcodes += [con[b + 1]]
                     b += 1
                 elif haselse:
-                    call_error('ELSE statement ends an IF-ELIF-ELSE chain. Tokens can not be evaluated after one.', 'syntax')
+                    call_error('An else statement ends an if-elif-else chain, tokens can not be evaluated after a chain has ended.', 'syntax')
                 b += 1
             if len(conditions) != len(runcodes):
-                call_error('Number of conditions must be equal to number of code sets to run in an IF-ELIF-ELSE chain.', 'syntax')
+                call_error('Number of conditions must be equal to number of code sets to run in an if-elif-else chain.', 'syntax')
             for b in range(len(conditions)):
                 e = False
-                if conditions[b] == 'ELSE':
+                if conditions[b] == 'else':
                     e = True
                 elif bool(evaluate(conditions[b], error=code[i], args=localargs)):
                     e = True
@@ -1291,12 +1289,12 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                             if echo:
                                 sys.stdout.write(str(ev))
                     break
-        elif a[0] == 'WHILE':
+        elif a[0] == 'while':
             if len(a) < 3 or ':' not in a:
-                call_error('WHILE loop requires at least a condition, the ":" separator, and code to run.', 'syntax')
+                call_error('While loop requires at least a condition, the ":" separator, and code to run.', 'syntax')
             contents = tuple(filter(None, split_list(a[1:], ':')))
             if not contents[1:]:
-                call_error('WHILE loop requires at least a condition, the ":" separator, and code to run.', 'syntax')
+                call_error('While loop requires at least a condition, the ":" separator, and code to run.', 'syntax')
             condition = contents[0]
             runcode = contents[1]
             while bool(evaluate(condition, error=code[i], args=localargs)):
@@ -1312,12 +1310,12 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                         o += str(ev)
                         if echo:
                             sys.stdout.write(str(ev))
-        elif a[0] == 'FOR':
+        elif a[0] == 'for':
             if len(a) < 3 or ':' not in a:
-                call_error('FOR loop requires at least a variable name, iterable, the ":" separator, and code to run.', 'syntax')
+                call_error('For loop requires at least a variable name, iterable, the ":" separator, and code to run.', 'syntax')
             contents = tuple(filter(None, split_list(a[1:], ':')))
             if not contents[1:]:
-                call_error('FOR loop requires at least an iterable, the ":" separator, and code to run.', 'syntax')
+                call_error('For loop requires at least an iterable, the ":" separator, and code to run.', 'syntax')
             if not contents[2:]:
                 variable = None
                 iterable = evaluate(contents[0], error=code[i], args=localargs)
@@ -1329,13 +1327,13 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
             if variable in global_vars and variable != ',':
                 call_error('Name ' + pformat(variable) + ' is already defined in the global variables list.', 'var')
             if variable in reserved_names and variable != ',':
-                call_error('Invalid FOR loop variable name. FOR loop variable names can not be reserved names', 'var')
+                call_error('Invalid for loop variable name, for loop variable names can not be reserved names', 'var')
             if isinstance(iterable, Null):
-                call_error('FOR loop iterable can not be NULL.', 'syntax')
+                call_error('For loop iterable can not be null.', 'syntax')
             if not runcode:
-                call_error('FOR loop code to run can not be empty.', 'syntax')
+                call_error('For loop code to run can not be empty.', 'syntax')
             if not isinstance(iterable, (Integer, String, Array)):
-                call_error('FOR loop can only iterate over an Array, Integer, or String.', 'type')
+                call_error('For loop can only iterate over an Array, Integer, or String.', 'type')
             if isinstance(iterable, Integer):
                 iterable = list(range(iterable.value))
             elif isinstance(iterable, String):
@@ -1361,21 +1359,21 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                             sys.stdout.write(str(ev))
             if oldvariable is not None:
                 local_vars[variable] = oldvariable
-        elif a[0] == 'TRY':
+        elif a[0] == 'try':
             if len(a) < 3 or ':' not in a:
-                call_error('TRY statement requires at least the ":" separator and code to run.', 'syntax')
+                call_error('Try statement requires at least the ":" separator and code to run.', 'syntax')
             contents = split_list(a[1:], ':')
             runcode = contents[0]
             if not runcode:
-                call_error('TRY statement code to run can not be empty.', 'syntax')
+                call_error('Try statement code to run can not be empty.', 'syntax')
             catches = {}
             keys = []
             for b in contents[1:]:
-                if b[0] == 'CATCH':
+                if b[0] == 'catch':
                     keys = b[1:]
                 else:
                     if not keys:
-                        call_error('TRY statement requires CATCH keyword before second set of code to run.', 'syntax')
+                        call_error('Try statement requires catch keyword before second set of code to run.', 'syntax')
                     keys = evaluate(keys, error=code[i], args=localargs)
                     if isinstance(keys, Array):
                         keys = keys.value
@@ -1383,11 +1381,11 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                         keys = keys,
                     for c in keys:
                         if not isinstance(c, String):
-                            call_error('CATCH arguments must be of type String.', 'type')
+                            call_error('Catch arguments must be of type String.', 'type')
                         catches[c.value] = b
                     keys = []
             if keys:
-                call_error('Unfinished CATCH keyword in TRY statement')
+                call_error('Unfinished catch keyword in try statement')
             oldcatch = current_catch
             current_catch = catches
             try:
@@ -1467,10 +1465,10 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                     if key[k + 1] in reserved_names and len(key) < 2:
                         call_error('Invalid variable name. Variable names can not be reserved names.', 'var')
                     if not re.match('^[a-zA-Z]+$', key[k + 1]) and key[k + 1]:
-                        call_error('Invalid variable name, variable names must fit this REGEX expression: ^[a-zA-Z]+$', 'var')
+                        call_error('Invalid variable name, variable names must fit this regex expression: ^[a-zA-Z]+$', 'var')
                 if k < len(key) - 2:
                     if not key[k]:
-                        call_error('Cannot set attribute with a NULL parent. (Missing value before `.`)', 'argerr')
+                        call_error('Cannot set attribute with a null parent. (Missing value before `.`)', 'argerr')
                     if k + 1 >= len(key):
                         call_error('Missing attribute to set inside parent "' + key[k - 1] + '".', 'argerr')
                     old = key[k]
@@ -1504,13 +1502,13 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                     value.data['name'] = key[1]
                     value.name = key[1]
                 if oper == '+:':
-                    value = do_action(local_vars[key[0]].data[key[1]], 'ADD', value, error=code[i])
+                    value = do_action(local_vars[key[0]].data[key[1]], 'add', value, error=code[i])
                 elif oper == '-:':
-                    value = do_action(local_vars[key[0]].data[key[1]], 'SUB', value, error=code[i])
+                    value = do_action(local_vars[key[0]].data[key[1]], 'sub', value, error=code[i])
                 elif oper == '*:':
-                    value = do_action(local_vars[key[0]].data[key[1]], 'MULT', value, error=code[i])
+                    value = do_action(local_vars[key[0]].data[key[1]], 'mult', value, error=code[i])
                 elif oper == '/:':
-                    value = do_action(local_vars[key[0]].data[key[1]], 'DIV', value, error=code[i])
+                    value = do_action(local_vars[key[0]].data[key[1]], 'div', value, error=code[i])
                 local_vars[key[0]].data[key[1]] = value
             elif key:
                 if oper != ':' and key[0] not in local_vars:
@@ -1519,30 +1517,30 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                     value.data['name'] = key[0]
                     value.name = key[0]
                 if oper == '+:':
-                    value = do_action(local_vars[key[0]], 'ADD', value, error=code[i])
+                    value = do_action(local_vars[key[0]], 'add', value, error=code[i])
                 elif oper == '-:':
-                    value = do_action(local_vars[key[0]], 'SUB', value, error=code[i])
+                    value = do_action(local_vars[key[0]], 'sub', value, error=code[i])
                 elif oper == '*:':
-                    value = do_action(local_vars[key[0]], 'MULT', value, error=code[i])
+                    value = do_action(local_vars[key[0]], 'mult', value, error=code[i])
                 elif oper == '/:':
-                    value = do_action(local_vars[key[0]], 'DIV', value, error=code[i])
+                    value = do_action(local_vars[key[0]], 'div', value, error=code[i])
                 local_vars[key[0]] = value
-        elif a[0] == 'DEL':
+        elif a[0] == 'del':
             if len(a) < 2:
-                call_error('DEL statement missing variable or key to delete.', 'argerr')
+                call_error('Del statement missing variable or key to delete.', 'argerr')
             key = ''.join(a[1:])
             if key in local_vars:
                 if isinstance(local_vars[key], BuiltinFunction):
-                    call_error('DEL statement can not delete built-in functions.', 'argerr')
+                    call_error('Del statement can not delete built-in functions.', 'argerr')
                 del local_vars[key]
             elif key in global_vars:
-                call_error('DEL statement can not delete global arguments.', 'argerr')
-        elif a[0] == 'IMPORT':
+                call_error('Del statement can not delete global arguments.', 'argerr')
+        elif a[0] == 'import':
             if len(a) < 2:
-                call_error('IMPORT statement requires at least one argument.', 'argerr')
+                call_error('Import requires at least one argument.', 'argerr')
             fnames = evaluate(a[1:], error=code[i], args=localargs)
             if any(not isinstance(f, String) for f in fnames):
-                call_error('IMPORT statement arguments must be of type String.', 'type')
+                call_error('Import arguments must be of type String.', 'type')
             for fname in fnames:
                 for b in global_vars['PATH'].value:
                     c = String(str(b.value) + '/' + str(fname.value))
@@ -1562,43 +1560,10 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                     break
                 else:
                     call_error('No scripts within directory ' + pformat(b.value) + ' could be found or imported from.', 'import')
-        elif a[0] == 'UNIMPORT':
-            if len(a) < 2:
-                call_error('UNIMPORT statement requires at least one argument.', 'argerr')
-            fnames = evaluate(a[1:], error=code[i], args=localargs)
-            if any(not isinstance(f, String) for f in fnames):
-                call_error('UNIMPORT statement arguments must be of type String.', 'type')
-            for fname in fnames:
-                for b in global_vars['PATH'].value:
-                    c = String(str(b.value) + '/' + str(fname.value))
-                    f = c.value
-                    if not f.endswith('.mdcl'):
-                        f += '.mdcl'
-                    newcode = loader.get_code(f)
-                    if isinstance(newcode, Exception):
-                        continue
-                    oldfile = current_file
-                    oldcode = current_code
-                    oldline = current_line
-                    old_local_vars = copy(local_vars)
-                    old_global_vars = copy(global_vars)
-                    run(newcode, f, raw=True)
-                    current_file = oldfile
-                    current_code = oldcode
-                    current_line = oldline
-                    for d in old_local_vars:
-                        if old_local_vars[d] != local_vars[d]:
-                            del local_vars[d]
-                    for d in old_global_vars:
-                        if old_global_vars[d] != global_vars[d]:
-                            del global_vars[d]
-                    break
-                else:
-                    call_error('No scripts within directory ' + pformat(b.value) + ' could be unimported.', 'import')
-        elif a[0] == 'SIG':
+        elif a[0] == 'sig':
             a = evaluate_line(a, start=2, error=code[i], args=localargs)
             if len(a) < 2:
-                call_error('SIG statement requires at least a signal name.', 'argerr')
+                call_error('Sig requires at least a signal name.', 'argerr')
             signal_name = a[1].strip()
             if signal_name not in sig_c.switches:
                 call_error('Signal ' + pformat(signal_name) + ' is not a valid signal.', 'unknownvalue')
@@ -1606,9 +1571,9 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
             if len(a) > 2:
                 newvalue = Boolean(a[2]).value.value
             if not isinstance(newvalue, bool):
-                call_error('SIG statement new value must evaluate to Boolean.', 'type')
+                call_error('Sig new value must evaluate to Boolean.', 'type')
             sig_c.switches[signal_name] = newvalue
-        elif a[0] == 'RAISE':
+        elif a[0] == 'raise':
             a = evaluate_line(a, start=1, error=code[i], args=localargs)
             errortag = String('')
             errortext = String('')
@@ -1630,10 +1595,10 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                     o += str(ev)
                     if echo:
                         sys.stdout.write(str(ev))
-        elif a[0] == 'ERRORTAG':
+        elif a[0] == 'errortag':
             a = evaluate_line(a, start=1, error=code[i], args=localargs)
             if len(a) < 2:
-                call_error('ERRORTAG statement requires at least an error type name.', 'argerr')
+                call_error('Errortag requires at least an error type name.', 'argerr')
             errortype = a[1]
             errortag = String('')
             if len(a) > 2:
@@ -1650,7 +1615,7 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                 error_tags[errortype.value] = errortag.value
             else:
                 del error_tags[errortype.value]
-        elif a[0] == 'YIELD':
+        elif a[0] == 'yield':
             if not yielding:
                 call_error('Yielding is not possible from the current scope.', 'syntax')
             yielded += [evaluate(a[1:], error=code[i], args=localargs)]
@@ -1711,7 +1676,7 @@ def pre_evaluate(exp, error=None, dostrings=False):
             pass
         elif new[a] == '.':
             if a - 1 < 0:
-                call_error('Cannot get attribute from NULL. (Missing value before `.`)', 'argerr', error)
+                call_error('Can not get attribute from null. (Missing value before ".")', 'argerr', error)
             if a + 1 >= len(new):
                 call_error('Missing argument to retrieve from "' + new[a - 1] + '".', 'argerr', error)
             new[a - 1] = evaluate([new[a - 1]], error=error)
@@ -1723,7 +1688,7 @@ def pre_evaluate(exp, error=None, dostrings=False):
             del new[a]
             del new[a]
             a -= 1
-        elif re.match('^RE(\'|").+(\'|")', new[a]): # Is new[a] a Regex String? If so, assign Regex() class.
+        elif re.match('^re(\'|").+(\'|")', new[a]): # Is new[a] a Regex String? If so, assign Regex() class.
             try:
                 new[a] = RegexString(ast.literal_eval(new[a][2:]))
             except Exception:
@@ -1739,9 +1704,9 @@ def pre_evaluate(exp, error=None, dostrings=False):
             new[a] = Float(float(new[a]))
         elif re.match('^(-|\+)*[0-9]+$', new[a]): # Is new[a] an integer? If so, assign Integer() class.
             new[a] = Integer(int(new[a]))
-        elif new[a] in ('TRUE', 'FALSE', 'true', 'false'): # Is new[a] a boolean? If so, assign Boolean() class.
+        elif new[a] in ('true', 'false'): # Is new[a] a boolean? If so, assign Boolean() class.
             new[a] = Boolean(bool(new[a]))
-        elif new[a] in ('null', 'NULL'): # Is new[a] null? If so, assign Null() class.
+        elif new[a] == 'null': # Is new[a] null? If so, assign Null() class.
             new[a] = Null()
         a += 1
     return new
@@ -1767,14 +1732,13 @@ def evaluate(exp, error=None, args=None, funcargs=False, has_breadcrumbs=True, f
     if not exp:
         return ()
     reps = {
-        '+': 'ADD',
-        '-': 'SUB',
-        '*': 'MULT',
-        '/': 'DIV',
-        '^': 'PWR',
-        '%': 'MOD',
-        '=': 'EQ',
-        '|': 'INDEX',
+        '+': 'add',
+        '-': 'sub',
+        '*': 'mult',
+        '/': 'div',
+        '^': 'pwr',
+        '%': 'mod',
+        '=': 'eq',
     }
     new = [a for a in exp]
     new = pre_evaluate(new, error=error)
@@ -1836,14 +1800,14 @@ def evaluate(exp, error=None, args=None, funcargs=False, has_breadcrumbs=True, f
             a += 1
         elif new[a] == '!':
             if a + 1 >= len(new):
-                call_error('CALL requires a right hand argument.', 'argerr', error)
+                call_error('call requires a right hand argument.', 'argerr', error)
             del new[a]
             new[a:] = as_tuple(evaluate(new[a:], error=error, args=args))
             thishas = dir(new[a])
-            if 'CALL' not in thishas:
+            if 'call' not in thishas:
                 call_error('Type ' + type(new[a]).__name__ + ' is not callable.', 'attr', error)
             if 'args' not in thishas or 'code' not in thishas:
-                vals = new[a].CALL()
+                vals = new[a].call()
                 settype = vals[1] if isinstance(vals, tuple) else type(vals)
                 new[a] = settype(vals[0] if isinstance(vals, tuple) else vals)
                 a -= 1
@@ -1862,39 +1826,39 @@ def evaluate(exp, error=None, args=None, funcargs=False, has_breadcrumbs=True, f
                         + ' positional argument' + ('' if len(new[a].args[i]) == 1 else 's') + '.', 'argerr')
                 if '@' not in new[a].args[i]:
                     local_vars[new[a].args[i][0]] = f[i]
-            new[a] = new[a].CALL(f)
+            new[a] = new[a].call(f)
             local_vars = deepcopy(oldlocals)
             del new[a + 1:]
-        elif new[a] == 'AND':
+        elif new[a] == 'and':
             if a - 1 < 0:
-                call_error('AND requires a left hand argument.', 'argerr', error)
+                call_error('and requires a left hand argument.', 'argerr', error)
             if a + 1 >= len(new):
-                call_error('AND requires a right hand argument.', 'argerr', error)
+                call_error('and requires a right hand argument.', 'argerr', error)
             left = evaluate(replacekeys([new[a - 1]], args=args), error=error, args=args)
             right = evaluate(replacekeys([new[a + 1]], args=args), error=error, args=args)
             new[a] = Boolean(Boolean(left) and Boolean(right))
             del new[a + 1]
             del new[a - 1]
             a -= 1
-        elif new[a] == 'OR':
+        elif new[a] == 'or':
             if a - 1 < 0:
-                call_error('OR requires a left hand argument.', 'argerr', error)
+                call_error('or requires a left hand argument.', 'argerr', error)
             if a + 1 >= len(new):
-                call_error('OR requires a right hand argument.', 'argerr', error)
+                call_error('or requires a right hand argument.', 'argerr', error)
             left = evaluate(replacekeys([new[a - 1]], args=args), error=error, args=args)
             right = evaluate_line(new, start=a + 1, error=error, args=args)[a + 1]#evaluate(replacekeys([new[a + 1]], args=args), error=error, args=args)
             new[a] = Boolean(Boolean(left) or Boolean(right))
             del new[a + 1]
             del new[a - 1]
             a -= 1
-        elif new[a] == 'ONLY':
+        elif new[a] == 'only':
             if a - 1 < 0:
-                call_error('ONLY requires a left hand argument.', 'argerr', error)
+                call_error('only requires a left hand argument.', 'argerr', error)
             if a + 1 >= len(new):
-                call_error('ONLY requires a right hand argument.', 'argerr', error)
+                call_error('only requires a right hand argument.', 'argerr', error)
             argument = evaluate(replacekeys([new[a - 1]], args=args), error=error, args=args)
             if not isinstance(argument, (Integer, String, Array)):
-                call_error('The ONLY keyword can only iterate over an Array, Integer, or String.', 'type')
+                call_error('only can only iterate over an Array, Integer, or String.', 'type')
             if isinstance(argument, Integer):
                 argument = range(argument.value)
             else:
@@ -1915,15 +1879,15 @@ def evaluate(exp, error=None, args=None, funcargs=False, has_breadcrumbs=True, f
             del new[a + 1]
             del new[a - 1]
             a -= 1
-        elif new[a] == 'TO':
+        elif new[a] == 'to':
             if a + 1 >= len(new):
-                call_error('TO requires a right hand argument.', 'argerr', error)
+                call_error('to requires a right hand argument.', 'argerr', error)
             left = evaluate(replacekeys([new[a - 1]], args=args), error=error, args=args) if a > 0 else Integer(0)
             right = evaluate(replacekeys([new[a + 1]], args=args), error=error, args=args)
             if not isinstance(left, Integer):
-                call_error('TO requires an Integer as left hand argument.', 'type', error)
+                call_error('to requires an Integer as left hand argument.', 'type', error)
             if not isinstance(right, Integer):
-                call_error('TO requires an Integer as right hand argument.', 'type', error)
+                call_error('to requires an Integer as right hand argument.', 'type', error)
             step = 1
             if right.value < left.value:
                 step = -1
@@ -1935,26 +1899,26 @@ def evaluate(exp, error=None, args=None, funcargs=False, has_breadcrumbs=True, f
             if a > 0:
                 del new[a - 1]
                 a -= 1
-        elif new[a] == 'SKIP':
+        elif new[a] == 'skip':
             if a - 1 < 0:
-                call_error('SKIP requires a left hand argument.', 'argerr', error)
+                call_error('skip requires a left hand argument.', 'argerr', error)
             if a + 1 >= len(new):
-                call_error('SKIP requires a right hand argument.', 'argerr', error)
+                call_error('skip requires a right hand argument.', 'argerr', error)
             left = evaluate(replacekeys([new[a - 1]], args=args), error=error, args=args)
             right = evaluate(replacekeys([new[a + 1]], args=args), error=error, args=args)
             if not isinstance(left, Array):
-                call_error('SKIP can only skip items in an Array.', 'type', error)
+                call_error('skip can only skip items in an Array.', 'type', error)
             if not isinstance(right, Integer):
-                call_error('SKIP can only skip through an Array using an Integer as index.', 'type', error)
-            if not right.value:
-                call_error('Right hand argument for SKIP can not be 0.', 'value', error)
-            new[a] = Array(left.value[::right.value])
+                call_error('skip can only skip through an Array using an Integer as index.', 'type', error)
+            new[a] = Array()
+            if right.value:
+                new[a] = Array(left.value[::right.value])
             del new[a + 1]
             del new[a - 1]
             a -= 1
-        elif new[a] == 'BREAK':
+        elif new[a] == 'break':
             if not break_token:
-                call_error('Can not BREAK non-existent loop.', 'break', error)
+                call_error('Can not break non-existent loop.', 'break', error)
             return BreakToken()
         elif new[a].startswith('<EVAL>') and new[a].endswith('</EVAL>'):
             new[a] = new[a][6:-7]
@@ -2021,9 +1985,9 @@ def evaluate(exp, error=None, args=None, funcargs=False, has_breadcrumbs=True, f
             elif all([re.match('^(-|\+)*[0-9]+$', z) for z in b]):
                 new[a] = Slice(new[a])
             else:
-                call_error('Invalid Syntax for bracket expression: ' + pformat(new[a]), 'syntax', error)
+                call_error('Invalid syntax for bracket expression: ' + pformat(new[a]), 'syntax', error)
             a -= 1
-        elif new[a] == 'ARRAY':
+        elif new[a] == 'array':
             contents = new[a + 1] if a < len(new) - 1 else []
             if contents:
                 contents = evaluate(replacekeys([new[a + 1]], args=args), error=error, args=args)
@@ -2240,44 +2204,41 @@ break_token = False
 
 reserved_names = (
     'FILE',
-    'LINE',
     '_',
     ',',
     'ERR',
     'PATH',
 
-    'NEW',
-    'IF',
-    'ELIF',
-    'ELSE',
-    'WHILE',
-    'FOR',
-    'TRY',
-    'CATCH',
+    'new',
+    'if',
+    'elif',
+    'else',
+    'while',
+    'for',
+    'try',
+    'catch',
     ':',
-    'DEL',
-    'IMPORT',
-    'PYIMPORT',
-    'UNIMPORT',
-    'DEFINE', # Remake define statement.
-    'SIG',
-    'RAISE',
-    'ERRORTAG',
-    'YIELD',
+    'del',
+    'import',
+    'define', # Remake define statement.
+    'sig',
+    'raise',
+    'errortag',
+    'yield',
 
-    'ADD',
-    'SUB',
-    'MULT',
-    'DIV',
-    'PWR',
-    'MOD',
-    'EQ',
-    'LT',
-    'GT',
-    'LE',
-    'GE',
-    'INDEX',
-    'HAS',
+    'add',
+    'sub',
+    'mult',
+    'div',
+    'pwr',
+    'mod',
+    'eq',
+    'lt',
+    'gt',
+    'le',
+    'ge',
+    'index',
+    'has',
 
     '+',
     '-',
@@ -2288,54 +2249,55 @@ reserved_names = (
     '=',
     '|',
 
-    'CALL',
-    'AND',
-    'OR',
-    'ONLY',
-    'TO',
-    'SKIP',
-    'ARRAY',
-    'ALPHABET',
+    'call',
+    'and',
+    'or',
+    'only',
+    'to',
+    'skip',
+    'break',
+    'array',
+    'alphabet',
 
-    'INTEGER',
-    'FLOAT',
-    'STRING',
-    'REGEX',
-    'TIMER',
-    'BOOLEAN',
-    'NULL',
+    'int',
+    'float',
+    'string',
+    'regex',
+    'timedelta',
+    'date',
+    'slice',
+    'bool',
+    'null',
 
-    'READ',
-    'LEN',
-    'READFILE',
-    'WRITEFILE',
-    'TYPE',
-    'ECHO',
-    'WAIT',
-    'GLOBALS',
-    'LOCALS',
-    'ARGV',
+    'read',
+    'len',
+    'readfile',
+    'writefile',
+    'type',
+    'echo',
+    'wait',
+    'globals',
+    'locals',
+    'argv',
 
-    'NOT',
+    'not',
 
-    'EXIT',
+    'exit',
 )
 
 mdcl_keywords = (
-    'ADD',
-    'SUB',
-    'MULT',
-    'DIV',
-    'PWR',
-    'MOD',
-    'EQ',
-    'LT',
-    'GT',
-    'LE',
-    'GE',
-    'INDEX',
-    'HAS',
-    'SLICE',
+    'add',
+    'sub',
+    'mult',
+    'div',
+    'pwr',
+    'mod',
+    'eq',
+    'lt',
+    'gt',
+    'le',
+    'ge',
+    'has',
 )
 
 start_error_tags = error_tags = CompactDict({
@@ -2386,73 +2348,70 @@ builtin_types = tuple(set(datatypes_switch.values())) + (
 )
 
 local_vars = CompactDict({
-    'INTEGER': BuiltinFunction('INTEGER',
+    'int': BuiltinFunction('int',
         [['@', '*']],
         Integer),
-    'FLOAT': BuiltinFunction('FLOAT',
+    'float': BuiltinFunction('float',
         [['@', '*']],
         Float),
-    'STRING': BuiltinFunction('STRING',
+    'string': BuiltinFunction('string',
         [['@', '*']],
         String),
-    'REGEX': BuiltinFunction('REGEX',
+    'regex': BuiltinFunction('regex',
         [[String, '*']],
         RegexString),
-    'TIMEDELTA': BuiltinFunction('TIMEDELTA',
+    'timedelta': BuiltinFunction('timedelta',
         [['@', '*']],
         Timedelta),
-    'DATE': BuiltinFunction('DATE',
+    'date': BuiltinFunction('date',
         [['@', '*']],
         Date),
-    'SLICE': BuiltinFunction('SLICE',
+    'slice': BuiltinFunction('slice',
         [['@', '*']],
         Slice),
-    'BOOLEAN': BuiltinFunction('BOOLEAN',
+    'bool': BuiltinFunction('bool',
         [['@', '*']],
         Boolean),
-    'NULL': BuiltinFunction('NULL',
-        [],
-        Null),
 
-    'READ': BuiltinFunction('READ',
+    'read': BuiltinFunction('read',
         [[String, '*']],
         BFList.read),
-    'LEN': BuiltinFunction('LEN',
+    'len': BuiltinFunction('len',
         [[String, Array]],
         BFList.get_length),
-    'READFILE': BuiltinFunction('READFILE',
+    'readfile': BuiltinFunction('readfile',
         [[String]],
         BFList.readfile),
-    'WRITEFILE': BuiltinFunction('WRITEFILE',
+    'writefile': BuiltinFunction('writefile',
         [[String], [String]],
         BFList.writefile),
-    'TYPE': BuiltinFunction('TYPE',
+    'type': BuiltinFunction('type',
         [['@']],
         BFList.get_type),
-    'ECHO': BuiltinFunction('ECHO',
+    'echo': BuiltinFunction('echo',
         [['@', '*'], [String, '*'], [String, '*']],
         BFList.echo),
-    'WAIT': BuiltinFunction('WAIT',
+    'wait': BuiltinFunction('wait',
         [[Integer, Float]],
         BFList.wait),
-    'GLOBALS': BuiltinFunction('GLOBALS',
+    'globals': BuiltinFunction('globals',
         [],
         BFList.get_globals),
-    'LOCALS': BuiltinFunction('LOCALS',
+    'locals': BuiltinFunction('locals',
         [],
         BFList.get_locals),
-    'ARGV': BuiltinFunction('ARGV',
+    'argv': BuiltinFunction('argv',
         [[Integer, '*']],
         BFList.get_argv),
-    'GETDATA': BuiltinFunction('GETDATA',
+    'getdata': BuiltinFunction('getdata',
         [['@']],
         BFList.get_data),
 
-    'NOT': BuiltinFunction('NOT',
+    'not': BuiltinFunction('not',
         [['@']],
         lambda x: Boolean(not x.value)),
 
-    'EXIT': BuiltinFunction('EXIT',
+    'exit': BuiltinFunction('exit',
         [],
         lambda x: (String(''), sys.exit())[0]),
 })
