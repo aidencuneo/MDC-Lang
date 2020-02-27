@@ -6,7 +6,7 @@ First Commit was at: 1/1/2020.
 '''
 
 _debug_mode = True
-__version__ = '1.5.7'
+__version__ = '1.5.8'
 
 import ast
 import datetime
@@ -39,6 +39,8 @@ class SignalCatches:
             'INT': True,
             'TSTP': True,
             'SEGV': True,
+
+            'ECHO': True,
         }
         signal.signal(signal.SIGINT, self.keyboard_interrupt)
         if 'SIGTSTP' in dir(signal):
@@ -673,6 +675,8 @@ class Slice(BaseDatatype):
                 newval = obj.value[start::skip]
             elif start:
                 newval = obj.value[start:]
+            elif stop < len(obj.value):
+                newval = obj.value[:stop]
             elif stop < len(obj.value) and skip != 1:
                 newval = obj.value[:stop:skip]
             elif skip != 1:
@@ -760,7 +764,7 @@ class Boolean(BaseDatatype):
         super().__init__(self.value)
 
     def __repr__(self):
-        return repr(self.value).upper()
+        return repr(self.value)
 
     def __str__(self):
         return repr(self)
@@ -775,6 +779,7 @@ class Boolean(BaseDatatype):
 class Array(BaseDatatype):
 
     def __init__(self, value=None):
+        # Iterate over value and add every value to self.value
         mdc_assert(self, value, (tuple, list) + builtin_types, 'ARRAY', showname=False)
         if isinstance(value, (tuple, list)):
             self.value = tuple(value)
@@ -1087,7 +1092,7 @@ def perform_try_catch(e, error=None, args=None):
     er = er[:er.index('::')]
     if er in current_catch:
         global_vars['ERR'] = String(er)
-        return evaluate(current_catch[er], error=error, args=args)
+        return evaluate((current_catch[er],), error=error, args=args)
     else:
         call_error(error_type=e)
 
@@ -1236,41 +1241,37 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
             del __init__
             del __repr__
         elif a[0] == 'if':
-            if len(a) < 3 or ':' not in a:
-                call_error('If statement requires at least a condition, the ":" separator, and code to run.', 'syntax')
-            contents = tuple(filter(None, split_list(a[1:], ':')))
-            if not contents[1:]:
-                call_error('If statement requires at least a condition, the ":" separator, and code to run.', 'syntax')
-            conditions = [contents[0]]
-            runcodes = [contents[1]]
+            if len(a) < 2:
+                call_error('if statement requires at least a condition and code to run.', 'syntax')
+            contents = split_list(a[1:], lambda x: x.startswith('{') and x.endswith('}'), astype=tuple)
+            if not contents[0]:
+                call_error('if statement requires at least a condition and code to run.', 'syntax')
+            conditions = [contents[0][:-1]]
+            runcodes = [contents[0][-1]]
             haselse = False
-            con = contents[2:]
+            con = contents[1:]
             b = 0
             while b < len(con):
                 if con[b][0] == 'if':
-                    call_error('If can not be placed after elif or else in the same chain.', 'syntax')
+                    call_error('if can not be placed after elif or else in the same chain.', 'syntax')
                 elif con[b][0] == 'elif':
                     if len(con[b]) < 2 or b + 1 >= len(con):
-                        call_error('Elif statement requires at least a condition, the ":" separator, and code to run.', 'syntax')
+                        call_error('elif statement requires at least a condition and code to run.', 'syntax')
                     if haselse:
-                        call_error('Elif can not be placed after else in the same chain.', 'syntax')
-                    conditions += [con[b][1:]]
-                    runcodes += [con[b + 1]]
-                    b += 1
+                        call_error('elif can not be placed after else in the same chain.', 'syntax')
+                    conditions += [con[b][1:-1]]
+                    runcodes += [con[b][-1]]
                 elif con[b][0] == 'else':
                     haselse = True
-                    if b + 1 >= len(con):
-                        call_error('Else statement requires at least the ":" separator and code to run.', 'syntax')
-                    if len(con[b]) > 1:
-                        call_error('Else statement can not have any conditions, use the elif statement to evaluate conditions.', 'syntax')
+                    if len(con[b]) < 2:
+                        call_error('else statement requires at least code to run.', 'syntax')
+                    if len(con[b]) > 2:
+                        call_error('else statement can not have any conditions, use the elif statement to evaluate conditions.', 'syntax')
                     conditions += ['else']
-                    runcodes += [con[b + 1]]
-                    b += 1
+                    runcodes += [con[b][-1]]
                 elif haselse:
                     call_error('An else statement ends an if-elif-else chain, tokens can not be evaluated after a chain has ended.', 'syntax')
                 b += 1
-            if len(conditions) != len(runcodes):
-                call_error('Number of conditions must be equal to number of code sets to run in an if-elif-else chain.', 'syntax')
             for b in range(len(conditions)):
                 e = False
                 if conditions[b] == 'else':
@@ -1278,7 +1279,7 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                 elif bool(evaluate(conditions[b], error=code[i], args=localargs)):
                     e = True
                 if e:
-                    ev = evaluate(runcodes[b], error=code[i], args=localargs, has_breadcrumbs=False)
+                    ev = evaluate((runcodes[b],), error=code[i], args=localargs, has_breadcrumbs=False)
                     if isinstance(ev, BreakToken):
                         return ev
                     if not isinstance(ev, Null):
@@ -1290,16 +1291,16 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                                 sys.stdout.write(str(ev))
                     break
         elif a[0] == 'while':
-            if len(a) < 3 or ':' not in a:
-                call_error('While loop requires at least a condition, the ":" separator, and code to run.', 'syntax')
-            contents = tuple(filter(None, split_list(a[1:], ':')))
-            if not contents[1:]:
-                call_error('While loop requires at least a condition, the ":" separator, and code to run.', 'syntax')
-            condition = contents[0]
-            runcode = contents[1]
-            while bool(evaluate(condition, error=code[i], args=localargs)):
+            if len(a) < 2:
+                call_error('while loop requires at least code to run. (condition not required)', 'syntax')
+            if not (a[-1].startswith('{') and a[-1].endswith('}')):
+                call_error('while loop requires at least code to run. (condition not required)', 'syntax')
+            condition = True if len(a) < 3 else a[1:-1]
+            if not condition:
+                call_error('invalid syntax for while loop condition.', 'syntax')
+            while condition or bool(evaluate(condition, error=code[i], args=localargs)):
                 break_token = True
-                ev = evaluate(runcode, error=code[i], args=localargs, has_breadcrumbs=False)
+                ev = evaluate((a[-1],), error=code[i], args=localargs, has_breadcrumbs=False)
                 if isinstance(ev, BreakToken):
                     break_token = False
                     break
@@ -1311,42 +1312,36 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                         if echo:
                             sys.stdout.write(str(ev))
         elif a[0] == 'for':
-            if len(a) < 3 or ':' not in a:
-                call_error('For loop requires at least a variable name, iterable, the ":" separator, and code to run.', 'syntax')
-            contents = tuple(filter(None, split_list(a[1:], ':')))
-            if not contents[1:]:
-                call_error('For loop requires at least an iterable, the ":" separator, and code to run.', 'syntax')
-            if not contents[2:]:
-                variable = None
-                iterable = evaluate(contents[0], error=code[i], args=localargs)
-                runcode = contents[1]
+            if len(a) < 3:
+                call_error('for loop requires at least an iterable and code to run. (var name optional)', 'syntax')
+            if not (a[-1].startswith('{') and a[-1].endswith('}')):
+                call_error('for loop is missing a valid code block.', 'syntax')
+            if ':' in a[1:-1]:
+                variable = a[a.index(':') - 1]
+                iterable = evaluate(a[a.index(':') + 1:-1], error=code[i], args=localargs)
             else:
-                variable = contents[0][0]
-                iterable = evaluate(contents[1], error=code[i], args=localargs)
-                runcode = contents[2]
+                variable = None
+                iterable = evaluate(a[1:-1], error=code[i], args=localargs)
+            runcode = a[-1]
             if variable in global_vars and variable != ',':
-                call_error('Name ' + pformat(variable) + ' is already defined in the global variables list.', 'var')
+                call_error('name ' + pformat(variable) + ' is already defined in the global variables list.', 'var')
             if variable in reserved_names and variable != ',':
-                call_error('Invalid for loop variable name, for loop variable names can not be reserved names', 'var')
-            if isinstance(iterable, Null):
-                call_error('For loop iterable can not be null.', 'syntax')
+                call_error('for loop var names can not be reserved names.', 'var')
             if not runcode:
-                call_error('For loop code to run can not be empty.', 'syntax')
-            if not isinstance(iterable, (Integer, String, Array)):
-                call_error('For loop can only iterate over an Array, Integer, or String.', 'type')
+                call_error('for loop code to run can not be empty.', 'syntax')
             if isinstance(iterable, Integer):
-                iterable = list(range(iterable.value))
-            elif isinstance(iterable, String):
+                iterable = Array(translate_datatypes(tuple(range(iterable.value))))
+            else:
                 iterable = Array(iterable)
             oldvariable = None
             if variable in local_vars:
                 oldvariable = local_vars[variable]
-            for val in translate_datatypes(iterable).value:
+            for val in iterable.value:
                 if variable is not None:
                     local_vars[variable] = val
                 local_vars[','] = val
                 break_token = True
-                ev = evaluate(runcode, error=code[i], args=localargs, has_breadcrumbs=False)
+                ev = evaluate((runcode,), error=code[i], args=localargs, has_breadcrumbs=False)
                 if isinstance(ev, BreakToken):
                     break_token = False
                     break
@@ -1360,20 +1355,21 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
             if oldvariable is not None:
                 local_vars[variable] = oldvariable
         elif a[0] == 'try':
-            if len(a) < 3 or ':' not in a:
-                call_error('Try statement requires at least the ":" separator and code to run.', 'syntax')
-            contents = split_list(a[1:], ':')
+            if len(a) < 3:
+                call_error('try statement requires at least code to run.', 'syntax')
+            contents = split_list(a[1:], lambda x: x.startswith('{') and x.endswith('}'), astype=tuple)
             runcode = contents[0]
             if not runcode:
-                call_error('Try statement code to run can not be empty.', 'syntax')
+                call_error('try statement code to run can not be empty.', 'syntax')
             catches = {}
             keys = []
             for b in contents[1:]:
+                if not (b[-1].startswith('{') and b[-1].endswith('}')):
+                    call_error('try statement is missing a valid code block.', 'syntax')
                 if b[0] == 'catch':
-                    keys = b[1:]
-                else:
+                    keys = b[1:-1]
                     if not keys:
-                        call_error('Try statement requires catch keyword before second set of code to run.', 'syntax')
+                        call_error('catch statement missing errortags to catch.', 'syntax')
                     keys = evaluate(keys, error=code[i], args=localargs)
                     if isinstance(keys, Array):
                         keys = keys.value
@@ -1381,11 +1377,13 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                         keys = keys,
                     for c in keys:
                         if not isinstance(c, String):
-                            call_error('Catch arguments must be of type String.', 'type')
-                        catches[c.value] = b
+                            call_error('errortags to catch must be String.', 'type')
+                        catches[c.value] = b[-1]
                     keys = []
+                elif 'catch' in b:
+                    call_error('catch keyword out of place.', 'syntax')
             if keys:
-                call_error('Unfinished catch keyword in try statement')
+                call_error('unfinished catch keyword in try statement.', 'syntax')
             oldcatch = current_catch
             current_catch = catches
             try:
@@ -1561,17 +1559,18 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                 else:
                     call_error('No scripts within directory ' + pformat(b.value) + ' could be found or imported from.', 'import')
         elif a[0] == 'sig':
-            a = evaluate_line(a, start=2, error=code[i], args=localargs)
             if len(a) < 2:
-                call_error('Sig requires at least a signal name.', 'argerr')
+                call_error('sig requires at least a signal name.', 'argerr')
+            if len(a) > 2:
+                a = evaluate_line(a, start=2, error=code[i], args=localargs)
             signal_name = a[1].strip()
             if signal_name not in sig_c.switches:
-                call_error('Signal ' + pformat(signal_name) + ' is not a valid signal.', 'unknownvalue')
+                call_error('signal ' + pformat(signal_name) + ' is not a valid signal.', 'unknownvalue')
             newvalue = not sig_c.switches[signal_name]
             if len(a) > 2:
                 newvalue = Boolean(a[2]).value.value
             if not isinstance(newvalue, bool):
-                call_error('Sig new value must evaluate to Boolean.', 'type')
+                call_error('sig new value must evaluate to Boolean.', 'type')
             sig_c.switches[signal_name] = newvalue
         elif a[0] == 'raise':
             a = evaluate_line(a, start=1, error=code[i], args=localargs)
@@ -1623,7 +1622,7 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
             a = evaluate(a, error=code[i], args=localargs)
             if isinstance(a, BreakToken):
                 return a
-            if isinstance(a, builtin_types) and not isinstance(a, Null):
+            if sig_c.switches['ECHO'] and isinstance(a, builtin_types):
                 o += str(a)
                 if echo:
                     sys.stdout.write(str(a))
@@ -1740,7 +1739,7 @@ def evaluate(exp, error=None, args=None, funcargs=False, has_breadcrumbs=True, f
         '%': 'mod',
         '=': 'eq',
     }
-    new = [a for a in exp]
+    new = exp[:]
     new = pre_evaluate(new, error=error)
     a = 0
     while a < len(new):
@@ -2075,16 +2074,22 @@ def replaceargs(code):
     return ''.join(code)
 
 
-def split_list(s, split_at):
+def split_list(s, split_at, astype=None):
     o = []
     c = []
     for a in s:
-        if a == split_at:
+        if '__call__' in dir(split_at):
+            c += [a]
+            if split_at(a):
+                o += [c]
+                c = []
+        elif a == split_at and isinstance(split_at, str):
             o += [c]
             c = []
         else:
             c += [a]
-    return list(filter(None, o + [c]))
+    o = filter(None, o + [c])
+    return astype(o) if astype is not None else list(o)
 
 
 def rindex(s, i):
@@ -2257,7 +2262,6 @@ reserved_names = (
     'skip',
     'break',
     'array',
-    'alphabet',
 
     'int',
     'float',

@@ -1,5 +1,6 @@
-'Welcome to this really cool game!';
-"\n";
+sig ECHO;
+
+!echo "Welcome to this really cool game!";
 
 bag : null;
 bag.sticks : 0;
@@ -7,37 +8,36 @@ bag.rocks : 0;
 
 bag.showInv : [] => {
     s : '';
-    if bag.sticks : {
+    if bag.sticks {
         s+: '-> Sticks : ' + bag.sticks + "\n"};
-    if bag.rocks : {
+    if bag.rocks {
         s+: '-> Rocks : ' + bag.rocks + "\n"};
-    if !s : {
+    if !s {
         s : "You have no items.\n"};
-    s;
+    !echo s[:-1];
 };
 
-while true : {
+while {
     i : '';
-    try : {
+    try {
         i : !read '> ';
-    } : catch 'keyboardinterrupt' : {
+    } catch 'keyboardinterrupt' {
         !echo "\nGoodbye.";
         break;
     };
 
-    if i = 'stick' : {
+    if i = 'stick' {
         bag.sticks +: 1;
         !echo 'Collected stick.';
-    } : elif i = 'rock' : {
+    } elif i = 'rock' {
         bag.rocks +: 1;
         !echo 'Collected rock.';
-    } : elif i = 'bag' : {
+    } elif i = 'bag' {
         !bag.showInv;
-    } : elif i = 'exit' : {
+    } elif i = 'exit' {
         !echo 'Goodbye.';
         break;
-    } : else : {
+    } else {
         !echo "Sorry, I didn't understand that.";
     };
-
 };
