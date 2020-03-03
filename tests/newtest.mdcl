@@ -29,15 +29,15 @@ while {
     if i = 'stick' {
         bag.sticks +: 1;
         !echo 'Collected stick.';
-    } elif i = 'rock' {
+    }  i = 'rock' {
         bag.rocks +: 1;
         !echo 'Collected rock.';
-    } elif i = 'bag' {
+    }  i = 'bag' {
         !bag.showInv;
-    } elif i = 'exit' {
+    }  i = 'exit' {
         !echo 'Goodbye.';
         break;
-    } else {
+    }  {
         !echo "Sorry, I didn't understand that.";
     };
 };

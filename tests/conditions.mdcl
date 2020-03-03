@@ -1,0 +1,16 @@
+sig ECHO;
+
+include : [fname,] => {
+    data : !readfile fname;
+    yield data;
+};
+
+parseCode : [code,] => {
+    code : !code.replace "\n" '';
+    code : !code.strip;
+    yield code;
+};
+
+code : !include !argv 1;
+minified : !parseCode code;
+!write minified;

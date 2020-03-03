@@ -6,7 +6,7 @@ First Commit was at: 1/1/2020.
 '''
 
 _debug_mode = True
-__version__ = '1.5.8'
+__version__ = '1.5.9'
 
 import ast
 import datetime
@@ -70,10 +70,19 @@ class SignalCatches:
 
 class BaseDatatype:
 
-    def __init__(self, value=None):
-        self.data = CompactDict({} if value is None else {
+    def __init__(self, value=None, start_data=None, is_object=True):
+        self.data = {} if value is None else {
             'value': value,
-        })
+        }
+        if start_data:
+            self.data.update(start_data)
+        if is_object:
+            self.data.update({
+                'map': BuiltinFunction('map',
+                    [['@']],
+                    self._map),
+            })
+        self.data = CompactDict(self.data)
 
     def do_action(self, action, args):
         if action in self.data:
@@ -109,6 +118,17 @@ class BaseDatatype:
             return val, type(val)
         return f(*args)
 
+    # Begin built-in Object functions, prefix with _
+
+    def _map(self, args):
+        try:
+            for a in self.value:
+                evaluate(['!', args[0], a])
+        except TypeError:
+            call_error(pformat(type(self).__name__) + ' object is not iterable.', 'type')
+            exit()
+        return Null()
+
 
 class Function(BaseDatatype):
 
@@ -129,7 +149,7 @@ class Function(BaseDatatype):
             self.args = args
             self.code = code
         self.value = self.get_value()
-        super().__init__(self.value)
+        super().__init__(self.value, is_object=False)
         self.data['name'] = self.name
 
     def __repr__(self):
@@ -441,7 +461,48 @@ class String(BaseDatatype):
             self.value = str(value.value)
         elif isinstance(value, datatypes):
             self.value = String(value.value).value
-        super().__init__(self.value)
+        data = {
+            'capitalise': BuiltinFunction('capitalise',
+                [],
+                self._capitalise),
+            'capitalize': BuiltinFunction('capitalize',
+                [],
+                self._capitalise),
+            'count': BuiltinFunction('count',
+                [['@']],
+                self._count),
+            'endswith': BuiltinFunction('endswith',
+                [['@']],
+                self._endswith),
+            'join': BuiltinFunction('join',
+                [['@']],
+                self._join),
+            'upper': BuiltinFunction('upper',
+                [],
+                self._upper),
+            'lower': BuiltinFunction('lower',
+                [],
+                self._lower),
+            'lstrip': BuiltinFunction('lstrip',
+                [['@', '*']],
+                self._lstrip),
+            'replace': BuiltinFunction('replace',
+                [['@', '*'], ['@', '*']],
+                self._replace),
+            'rstrip': BuiltinFunction('rstrip',
+                [['@', '*']],
+                self._rstrip),
+            'split': BuiltinFunction('split',
+                [['@', '*'], ['@', '*']],
+                self._split),
+            'strip': BuiltinFunction('strip',
+                [['@', '*']],
+                self._strip),
+            'startswith': BuiltinFunction('startswith',
+                [['@']],
+                self._startswith),
+        }
+        super().__init__(self.value, start_data=data)
 
     def __repr__(self):
         return pformat(self.value)
@@ -513,6 +574,70 @@ class String(BaseDatatype):
         mdc_assert(self, other, String, 'has')
         if isinstance(other, String):
             return other.value in self.value, Boolean
+
+    # Begin built-in Object functions, prefix with _
+
+    def _capitalise(self, args):
+        return String(self.value.capitalise())
+
+    def _count(self, args):
+        mdc_assert(self, args[0], String, 'count')
+        return Integer(self.value.count(args[0].value))
+
+    def _endswith(self, args):
+        mdc_assert(self, args[0], String, 'endswith')
+        return Boolean(self.value.endswith(args[0].value))
+
+    def _join(self, args):
+        mdc_assert(self, args[0], Array, 'join')
+        j = ''
+        v = args[0].value
+        for a in range(len(v)):
+            if not isinstance(v[a], String):
+                call_error('expected type String in index ' + str(a) + ' of iterable during joining.',
+                    'type')
+            j += v[a].value
+        return String(j)
+
+    def _upper(self, args):
+        return String(self.value.upper())
+
+    def _lower(self, args):
+        return String(self.value.lower())
+
+    def _lstrip(self, args):
+        mdc_assert(self, args[0], (Null, String), 'lstrip')
+        if isinstance(args[0], Null):
+            return String(self.value.lstrip())
+        return String(self.value.lstrip(args[0].value))
+
+    def _replace(self, args):
+        mdc_assert(self, args[0], String, 'replace')
+        mdc_assert(self, args[1], String, 'replace')
+        return String(self.value.replace(args[0].value, args[1].value))
+
+    def _rstrip(self, args):
+        mdc_assert(self, args[0], (Null, String), 'rstrip')
+        if isinstance(args[0], Null):
+            return String(self.value.rstrip())
+        return String(self.value.rstrip(args[0].value))
+
+    def _split(self, args):
+        mdc_assert(self, args[0], (Null, String), 'split')
+        mdc_assert(self, args[1], (Null, Integer), 'split')
+        return Array(self.value.split(
+            None if isinstance(args[0], Null) else args[0].value,
+            -1 if isinstance(args[1], Null) else args[1].value))
+
+    def _strip(self, args):
+        mdc_assert(self, args[0], (Null, String), 'strip')
+        if isinstance(args[0], Null):
+            return String(self.value.strip())
+        return String(self.value.strip(args[0].value))
+
+    def _startswith(self, args):
+        mdc_assert(self, args[0], String, 'startswith')
+        return Boolean(self.value.startswith(args[0].value))
 
 
 class RegexString(BaseDatatype):
@@ -750,24 +875,21 @@ class Boolean(BaseDatatype):
         if isinstance(value, str):
             value = value.lower()
             if value == 'true':
-                self.value = Integer(1)
+                self.value = True
             elif value == 'false':
-                self.value = Integer(0)
+                self.value = False
             else:
-                self.value = Integer(bool(value))
+                self.value = bool(value)
         elif isinstance(value, bool):
-            self.value = Integer(value)
+            self.value = value
         elif isinstance(value, builtin_types):
-            self.value = Integer(bool(value.value))
+            self.value = bool(value.value)
         else:
-            self.value = Integer(bool(value))
+            self.value = bool(value)
         super().__init__(self.value)
 
     def __repr__(self):
-        return repr(self.value)
-
-    def __str__(self):
-        return repr(self)
+        return repr(self.value).lower()
 
     def __bool__(self):
         return bool(self.value)
@@ -779,8 +901,7 @@ class Boolean(BaseDatatype):
 class Array(BaseDatatype):
 
     def __init__(self, value=None):
-        # Iterate over value and add every value to self.value
-        mdc_assert(self, value, (tuple, list) + builtin_types, 'ARRAY', showname=False)
+        mdc_assert(self, value, (tuple, list) + builtin_types, 'array', showname=False)
         if isinstance(value, (tuple, list)):
             self.value = tuple(value)
         elif isinstance(value, String):
@@ -1254,23 +1375,25 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
             while b < len(con):
                 if con[b][0] == 'if':
                     call_error('if can not be placed after elif or else in the same chain.', 'syntax')
-                elif con[b][0] == 'elif':
-                    if len(con[b]) < 2 or b + 1 >= len(con):
-                        call_error('elif statement requires at least a condition and code to run.', 'syntax')
-                    if haselse:
-                        call_error('elif can not be placed after else in the same chain.', 'syntax')
-                    conditions += [con[b][1:-1]]
-                    runcodes += [con[b][-1]]
-                elif con[b][0] == 'else':
+                elif con[b][0] == 'else' or (con[b][0].startswith('{') and con[b][0].endswith('}')):
                     haselse = True
-                    if len(con[b]) < 2:
+                    if len(con[b]) < (2 if con[b][0] == 'else' else 1):
                         call_error('else statement requires at least code to run.', 'syntax')
-                    if len(con[b]) > 2:
+                    if len(con[b]) > (2 if con[b][0] == 'else' else 1):
                         call_error('else statement can not have any conditions, use the elif statement to evaluate conditions.', 'syntax')
                     conditions += ['else']
                     runcodes += [con[b][-1]]
+                elif con[b][0] == 'elif' or (con[b][-1].startswith('{') and con[b][-1].endswith('}')):
+                    if len(con[b]) < (3 if con[b][0] == 'elif' else 2):
+                        call_error('elif statement requires at least a condition and code to run.', 'syntax')
+                    if haselse:
+                        call_error('elif can not be placed after else in the same chain.', 'syntax')
+                    conditions += [con[b][1:-1] if con[b][0] == 'elif' else con[b][:-1]]
+                    runcodes += [con[b][-1]]
                 elif haselse:
-                    call_error('An else statement ends an if-elif-else chain, tokens can not be evaluated after a chain has ended.', 'syntax')
+                    call_error('an else statement ends an if-elif-else chain, tokens can not be evaluated after a chain has ended.', 'syntax')
+                else:
+                    call_error('invalid token ' + pformat(con[b][0]) + ' found in if-elif-else chain.', 'syntax')
                 b += 1
             for b in range(len(conditions)):
                 e = False
@@ -1461,20 +1584,20 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
             while k < len(key):
                 if k + 1 < len(key):
                     if key[k + 1] in reserved_names and len(key) < 2:
-                        call_error('Invalid variable name. Variable names can not be reserved names.', 'var')
+                        call_error('invalid variable name, variable names can not be reserved names.', 'var')
                     if not re.match('^[a-zA-Z]+$', key[k + 1]) and key[k + 1]:
-                        call_error('Invalid variable name, variable names must fit this regex expression: ^[a-zA-Z]+$', 'var')
+                        call_error('invalid variable name, variable names must fit this regex expression: ^[a-zA-Z]+$', 'var')
                 if k < len(key) - 2:
                     if not key[k]:
-                        call_error('Cannot set attribute with a null parent. (Missing value before `.`)', 'argerr')
+                        call_error('can not set attribute with a null parent (missing value before `.`)', 'argerr')
                     if k + 1 >= len(key):
-                        call_error('Missing attribute to set inside parent "' + key[k - 1] + '".', 'argerr')
+                        call_error('missing attribute to set inside parent "' + key[k - 1] + '".', 'argerr')
                     old = key[k]
                     key[k] = evaluate([key[k]], error=code[i], args=localargs)
                     try:
                         key[k] = key[k].data[key[k + 1]]
-                    except KeyError:
-                        call_error('Variable ' + pformat(old) + ' does not have attribute ' + pformat(key[k + 1]) + '.',
+                    except KeyError as e:
+                        call_error(type(old).__name__ + ' ' + pformat(old) + ' does not have attribute ' + pformat(key[k + 1]) + '.',
                             'attr')
                     del key[k + 1]
                     k -= 1
@@ -1486,12 +1609,12 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                 elif value:
                     value = translate_datatypes(value[0])
             if key[2:] or not key:
-                call_error('Invalid settatr syntax.', 'syntax')
+                call_error('invalid settatr syntax.', 'syntax')
             if key[1:]:
                 if oper != ':' and key[0] not in local_vars:
-                    call_error('Undefined Token: ' + pformat(key[0]), 'syntax', code[i])
+                    call_error('undefined token: ' + pformat(key[0]), 'syntax', code[i])
                 if oper != ':' and key[1] not in local_vars[key[0]].data:
-                    call_error('Variable ' + pformat(key[0]) + ' does not have attribute ' + pformat(key[1]) + '.',
+                    call_error(type(key[0]).__name__ + ' ' + pformat(key[0]) + ' does not have attribute ' + pformat(key[1]) + '.',
                         'attr')
                 if key[1] == 'value':
                     call_error('Attribute "value" of type "' + type(local_vars[key[0]]).__name__ + '" is a readonly value.',
@@ -1507,7 +1630,10 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                     value = do_action(local_vars[key[0]].data[key[1]], 'mult', value, error=code[i])
                 elif oper == '/:':
                     value = do_action(local_vars[key[0]].data[key[1]], 'div', value, error=code[i])
-                local_vars[key[0]].data[key[1]] = value
+                if isinstance(key[0], str):
+                    local_vars[key[0]].data[key[1]] = value
+                else:
+                    key[0].data[key[1]] = value
             elif key:
                 if oper != ':' and key[0] not in local_vars:
                     call_error('Undefined Token: ' + pformat(key[0]), 'syntax', code[i])
@@ -1568,7 +1694,7 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                 call_error('signal ' + pformat(signal_name) + ' is not a valid signal.', 'unknownvalue')
             newvalue = not sig_c.switches[signal_name]
             if len(a) > 2:
-                newvalue = Boolean(a[2]).value.value
+                newvalue = Boolean(a[2]).value
             if not isinstance(newvalue, bool):
                 call_error('sig new value must evaluate to Boolean.', 'type')
             sig_c.switches[signal_name] = newvalue
@@ -1683,7 +1809,8 @@ def pre_evaluate(exp, error=None, dostrings=False):
                 old = new[a - 1]
                 new[a - 1] = new[a - 1].data[new[a + 1]]
             except KeyError:
-                call_error('Variable ' + pformat(exp[a - 1]) + ' does not have attribute ' + pformat(new[a + 1]) + '.', 'attr', error)
+                call_error(type(old).__name__ + ' ' + pformat(exp[a - 1]) + ' does not have attribute ' + pformat(new[a + 1]) + '.',
+                    'attr', error)
             del new[a]
             del new[a]
             a -= 1
@@ -1704,7 +1831,7 @@ def pre_evaluate(exp, error=None, dostrings=False):
         elif re.match('^(-|\+)*[0-9]+$', new[a]): # Is new[a] an integer? If so, assign Integer() class.
             new[a] = Integer(int(new[a]))
         elif new[a] in ('true', 'false'): # Is new[a] a boolean? If so, assign Boolean() class.
-            new[a] = Boolean(bool(new[a]))
+            new[a] = Boolean(new[a])
         elif new[a] == 'null': # Is new[a] null? If so, assign Null() class.
             new[a] = Null()
         a += 1
@@ -2127,7 +2254,7 @@ class BFList:
         try:
             with open(args[0].value, 'rb') as f:
                 data = f.read()
-            data = data.decode('utf-8')
+            data = data.decode('utf-8').replace('\r\n', '\n')
             return String(data)
         except UnicodeDecodeError:
             call_error('READFILE failed to decode file encoding from: "' + str(args[0]) + '".', 'ioerr')
@@ -2148,12 +2275,21 @@ class BFList:
 
     @staticmethod
     def echo(args):
+        for a in args:
+            if isinstance(a, datatypes):
+                print(a, end='')
+            else:
+                print(String(a), end='')
+        return String('')
+
+    @staticmethod
+    def write(args):
         content = String('') if isinstance(args[0], Null) else args[0]
         sep = args[1] if isinstance(args[1], String) else String(' ')
         end = args[2] if isinstance(args[2], String) else String('\n')
         if isinstance(content, Array):
             content = String(sep.value.join([str(a) for a in content.value]))
-        elif isinstance(content, str):
+        if isinstance(content, str):
             content = String(content)
         print(content, end=end.value)
         return String('')
@@ -2393,8 +2529,11 @@ local_vars = CompactDict({
         [['@']],
         BFList.get_type),
     'echo': BuiltinFunction('echo',
-        [['@', '*'], [String, '*'], [String, '*']],
+        [['@', '*']],
         BFList.echo),
+    'write': BuiltinFunction('write',
+        [['@', '*'], ['@', '*'], ['@', '*']],
+        BFList.write),
     'wait': BuiltinFunction('wait',
         [[Integer, Float]],
         BFList.wait),
