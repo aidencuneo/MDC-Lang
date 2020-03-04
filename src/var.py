@@ -6,23 +6,19 @@ First Commit was at: 1/1/2020.
 '''
 
 _debug_mode = True
-__version__ = '1.5.9'
+__version__ = '1.6.0'
 
 import ast
 import datetime
 import os
-import random
 import re
 import signal
 import sys
-import string
-import threading
 import time
 import traceback as tb
 import types
 
 from copy import copy, deepcopy
-from functools import partial
 from pprint import pformat
 
 import loader
@@ -139,7 +135,7 @@ class Function(BaseDatatype):
             self.code = name.code
         else:
             if args is None or code is None:
-                call_error('Function can not be declared without second or third arguments '
+                call_error('function can not be declared without second or third arguments '
                     'if first argument is not a Function. This is a Python error.', 'fatal')
             for a in range(len(args)):
                 for b in range(len(args[a])):
@@ -167,13 +163,13 @@ class Function(BaseDatatype):
         r = [a for a in self.args if '*' not in a]
         for a in range(len(r)):
             if a >= len(args):
-                call_error('Function ' + self.name + ' requires at least ' + str(len(r))
+                call_error('function ' + self.name + ' requires at least ' + str(len(r))
                     + ' positional argument' + ('' if len(r) == 1 else 's') + '.', 'argerr')
         for a in range(len(self.args)):
             if a >= len(args):
                 args += (Null(),)
         if len(args) > len(self.args):
-            call_error('Function ' + self.name + ' received too many arguments, '
+            call_error('function ' + self.name + ' received ' + str(len(args)) + ' arguments, '
                 'maximum amount for this Function is ' + str(len(self.args)) + '.', 'argerr')
         return args
 
@@ -1742,8 +1738,13 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                 del error_tags[errortype.value]
         elif a[0] == 'yield':
             if not yielding:
-                call_error('Yielding is not possible from the current scope.', 'syntax')
+                call_error('value returning is not possible from the current scope.', 'syntax')
             yielded += [evaluate(a[1:], error=code[i], args=localargs)]
+        elif a[0] == 'ret':
+            if not yielding:
+                call_error('value returning is not possible from the current scope.', 'syntax')
+            yielded += [evaluate(a[1:], error=code[i], args=localargs)]
+            break
         else:
             a = evaluate(a, error=code[i], args=localargs)
             if isinstance(a, BreakToken):
@@ -1871,7 +1872,7 @@ def evaluate(exp, error=None, args=None, funcargs=False, has_breadcrumbs=True, f
     a = 0
     while a < len(new):
         if isinstance(new[a], datatypes + (type(None),)) and not (
-            isinstance(new[a], Slice)
+            isinstance(new[a], (Array, Slice))
         ):
             a += 1
             continue
@@ -1879,9 +1880,9 @@ def evaluate(exp, error=None, args=None, funcargs=False, has_breadcrumbs=True, f
             new[a] = reps[new[a]]
         if new[a] in mdcl_keywords:
             if a - 1 < 0:
-                call_error('Missing first argument for ' + new[a] + ' method.', 'syntax', error)
+                call_error('missing first argument for ' + new[a] + ' method.', 'syntax', error)
             if a + 1 >= len(new):
-                call_error('Missing second argument for ' + new[a] + ' method.', 'syntax', error)
+                call_error('missing second argument for ' + new[a] + ' method.', 'syntax', error)
             try:
                 vals = new[a - 1].do_action(new[a], (evaluate([new[a + 1]], error=error, args=args),))
                 settype = vals[1] if isinstance(vals, tuple) else type(vals)
@@ -1890,7 +1891,7 @@ def evaluate(exp, error=None, args=None, funcargs=False, has_breadcrumbs=True, f
                 del new[a - 1]
                 a -= 1
             except AttributeError:
-                call_error('Type ' + type(new[a - 1]).__name__ + ' does not have a method for handling ' + new[a],
+                call_error('type ' + type(new[a - 1]).__name__ + ' does not have a method for handling ' + new[a],
                     'attr', error)
         elif isinstance(new[a], Slice):
             if a - 1 >= 0:
@@ -1899,6 +1900,52 @@ def evaluate(exp, error=None, args=None, funcargs=False, has_breadcrumbs=True, f
                 new[a] = settype(vals[0] if isinstance(vals, tuple) else vals)
                 del new[a - 1]
                 a -= 1
+        elif isinstance(new[a], Array):
+            if a - 1 < 0:
+                a += 1
+                continue
+            if not isinstance(new[a - 1], (Function, BuiltinFunction)):
+                a += 1
+                continue
+            a -= 1
+            thishas = dir(new[a])
+            if 'call' not in thishas:
+                call_error('type ' + type(new[a]).__name__ + ' is not callable.', 'attr', error)
+            if 'args' not in thishas or 'code' not in thishas:
+                vals = new[a].call()
+                settype = vals[1] if isinstance(vals, tuple) else type(vals)
+                new[a] = settype(vals[0] if isinstance(vals, tuple) else vals)
+                a -= 1
+                continue
+            f = new[a + 1].value
+            oldlocals = deepcopy(local_vars)
+            if func_self:
+                local_vars['self'] = new[a]
+            for i in range(len(new[a].args)):
+                if not new[a].args[i]:
+                    continue
+                if i >= len(f) and new[a].args[i][-1] == '*':
+                    f += Null(),
+                elif i >= len(f):
+                    call_error('function ' + new[a].name + ' requires at least ' + str(len(new[a].args[i]))
+                        + ' positional argument' + ('' if len(new[a].args[i]) == 1 else 's') + '.', 'argerr')
+                if '@' not in new[a].args[i]:
+                    local_vars[new[a].args[i][0]] = f[i]
+            new[a] = new[a].call(f)
+            local_vars = deepcopy(oldlocals)
+            del new[a + 1:]
+        elif new[a] == '!':
+            if a + 1 >= len(new):
+                call_error('missing second argument for ! (boolean not) operator.', 'syntax', error)
+            del new[a]
+            new[a:] = as_tuple(evaluate(new[a:], error=error, args=args))
+            if 'boolnot' in dir(new[a]):
+                vals = new[a].boolnot()
+                settype = vals[1] if isinstance(vals, tuple) else type(vals)
+                new[a] = settype(vals[0] if isinstance(vals, tuple) else vals)
+            else:
+                new[a] = Boolean(not new[a].value)
+            a -= 1
         elif new[a].startswith('args[') and new[a].endswith(']'):
             key = int(new[a][5:-1])
             if args:
@@ -1911,50 +1958,19 @@ def evaluate(exp, error=None, args=None, funcargs=False, has_breadcrumbs=True, f
                 new[a] = global_args[key]
         elif new[a] == '=>':
             if a - 1 < 0:
-                call_error('Inline Function declaration requires a left hand argument.', 'argerr', error)
+                call_error('inline function declaration requires a left hand argument.', 'argerr', error)
             if a + 1 >= len(new):
-                call_error('Inline Function declaration requires a right hand argument.', 'argerr', error)
+                call_error('inline function declaration requires a right hand argument.', 'argerr', error)
             if not isinstance(new[a - 1], Arglist):
-                call_error('Inline Function declaration requires Arglist as left hand argument.', 'type', error)
+                call_error('inline function declaration requires Arglist as left hand argument.', 'type', error)
             if not (new[a + 1].startswith('{') and new[a + 1].endswith('}')):
-                call_error('Inline Function declaration requires a code block as right hand argument.', 'type', error)
+                call_error('inline function declaration requires a code block as right hand argument.', 'type', error)
             func = new[a + 1]
             arguments = new[a - 1].value
             new[a] = Function('<InlineFunction>', arguments, func)
             del new[a + 1]
             del new[a - 1]
             a += 1
-        elif new[a] == '!':
-            if a + 1 >= len(new):
-                call_error('call requires a right hand argument.', 'argerr', error)
-            del new[a]
-            new[a:] = as_tuple(evaluate(new[a:], error=error, args=args))
-            thishas = dir(new[a])
-            if 'call' not in thishas:
-                call_error('Type ' + type(new[a]).__name__ + ' is not callable.', 'attr', error)
-            if 'args' not in thishas or 'code' not in thishas:
-                vals = new[a].call()
-                settype = vals[1] if isinstance(vals, tuple) else type(vals)
-                new[a] = settype(vals[0] if isinstance(vals, tuple) else vals)
-                a -= 1
-                continue
-            f = as_tuple(evaluate(new[a + 1:], error=error, args=args, funcargs=True))
-            oldlocals = deepcopy(local_vars)
-            if func_self:
-                local_vars['self'] = new[a]
-            for i in range(len(new[a].args)):
-                if not new[a].args[i]:
-                    continue
-                if i >= len(f) and new[a].args[i][-1] == '*':
-                    f += Null(),
-                elif i >= len(f):
-                    call_error('Function ' + new[a].name + ' requires at least ' + str(len(new[a].args[i]))
-                        + ' positional argument' + ('' if len(new[a].args[i]) == 1 else 's') + '.', 'argerr')
-                if '@' not in new[a].args[i]:
-                    local_vars[new[a].args[i][0]] = f[i]
-            new[a] = new[a].call(f)
-            local_vars = deepcopy(oldlocals)
-            del new[a + 1:]
         elif new[a] == 'and':
             if a - 1 < 0:
                 call_error('and requires a left hand argument.', 'argerr', error)
@@ -2056,10 +2072,11 @@ def evaluate(exp, error=None, args=None, funcargs=False, has_breadcrumbs=True, f
             if not new[a].endswith(')'):
                 call_error('Unmatched ' + pformat('(') + '.', 'syntax', error)
             values = evaluate(replacekeys(loader.tokenise(new[a][1:-1].strip()), args=args), error=error, args=args)
-            if isinstance(values, (tuple, list)):
-                new[:a + 1:] = values
-            else:
-                new[a] = values
+            if not isinstance(values, (tuple, list)):
+                values = values,
+            new[a] = Array(values)
+            if len(new) > 1 and len(exp) > 1:
+                a -= 1
         elif new[a].startswith('<') or new[a].endswith('>'):
             if not new[a].startswith('<'):
                 call_error('Unmatched ' + pformat('>') + '.', 'syntax', error)
@@ -2275,11 +2292,10 @@ class BFList:
 
     @staticmethod
     def echo(args):
-        for a in args:
-            if isinstance(a, datatypes):
-                print(a, end='')
-            else:
-                print(String(a), end='')
+        if isinstance(args[0], datatypes):
+            print(args[0], end='')
+        else:
+            print(String(args[0]), end='')
         return String('')
 
     @staticmethod
@@ -2328,6 +2344,17 @@ class BFList:
             n.value = String(n.value[:-2] + '}')
             return n
         return Null()
+
+    @staticmethod
+    def _exec(args):
+        mdc_assert(None, args[0], String, 'exec', showname=False)
+        start(args[0].value)
+        return Null()
+
+    @staticmethod
+    def _eval(args):
+        mdc_assert(None, args[0], String, 'eval', showname=False)
+        return evaluate(loader.tokenise(args[0].value))
 
 
 #
@@ -2549,6 +2576,12 @@ local_vars = CompactDict({
     'getdata': BuiltinFunction('getdata',
         [['@']],
         BFList.get_data),
+    'exec': BuiltinFunction('exec',
+        [['@']],
+        BFList._exec),
+    'eval': BuiltinFunction('eval',
+        [['@']],
+        BFList._eval),
 
     'not': BuiltinFunction('not',
         [['@']],

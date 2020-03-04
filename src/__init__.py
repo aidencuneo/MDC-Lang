@@ -30,8 +30,8 @@ if options:
         del options[options.index('-v')]
         print('MDCL ' + __version__)
         sys.exit()
-    if '--version' in options:
-        del options[options.index('--version')]
+    if '-version' in options:
+        del options[options.index('-version')]
         print('MDCL ' + __version__)
         sys.exit()
     if '-r' in options:

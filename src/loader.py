@@ -72,8 +72,8 @@ def tokenise(line):
     sq = False
     dq = False
     bt = False
-    rb = False
     bcomment = False
+    rb = 0
     sb = 0
     cb = 0
     lg = 0
@@ -108,61 +108,61 @@ def tokenise(line):
         ) and not (
             t == '/' and a == ':'
         ) and not (
-            sq or dq or bt or rb or sb > 0 or cb > 0 or lg > 0 or bcomment
+            sq or dq or bt or rb > 0 or sb > 0 or cb > 0 or lg > 0 or bcomment
         ):
             l.append(o.strip())
             o = ''
         if a == "'" and not (
-            dq or bt or rb or sb > 0 or cb > 0 or lg > 0 or bcomment
+            dq or bt or rb > 0 or sb > 0 or cb > 0 or lg > 0 or bcomment
         ):
             sq = not sq
         elif a == '"' and not (
-            sq or bt or rb or sb > 0 or cb > 0 or lg > 0 or bcomment
+            sq or bt or rb > 0 or sb > 0 or cb > 0 or lg > 0 or bcomment
         ):
             dq = not dq
         elif a == '`' and not (
-            sq or dq or rb or sb > 0 or cb > 0 or lg > 0
+            sq or dq or rb > 0 or sb > 0 or cb > 0 or lg > 0
         ):
             bt = not bt
         elif a == '(' and not (
             sq or dq or bt or sb > 0 or cb > 0 or lg > 0
         ):
-            rb = True
+            rb += 1
         elif a == ')' and not (
             sq or dq or bt or sb > 0 or cb > 0 or lg > 0
         ):
-            rb = False
+            rb -= 1
         elif a == '[' and not (
-            sq or dq or bt or rb or cb > 0 or lg > 0
+            sq or dq or bt or rb > 0 or cb > 0 or lg > 0
         ):
             sb += 1
         elif a == ']' and not (
-            sq or dq or bt or rb or cb > 0 or lg > 0
+            sq or dq or bt or rb > 0 or cb > 0 or lg > 0
         ):
             sb -= 1
         elif a == '{' and not (
-            sq or dq or bt or rb or sb > 0 or lg > 0
+            sq or dq or bt or rb > 0 or sb > 0 or lg > 0
         ):
             cb += 1
         elif a == '}' and not (
-            sq or dq or bt or rb or sb > 0 or lg > 0
+            sq or dq or bt or rb > 0 or sb > 0 or lg > 0
         ):
             cb -= 1
         elif a == '<' and not (
-            sq or dq or bt or rb or sb > 0 or cb > 0
+            sq or dq or bt or rb > 0 or sb > 0 or cb > 0
         ):
             lg += 1
         elif a == '>' and not (
-            sq or dq or bt or rb or sb > 0 or cb > 0
+            sq or dq or bt or rb > 0 or sb > 0 or cb > 0
         ):
             lg -= 1
         elif t == '/' and a == '*' and not (
-            sq or dq or bt or rb or sb > 0 or cb > 0
+            sq or dq or bt or rb > 0 or sb > 0 or cb > 0
         ):
             l = l[:-1]
             bcomment = True
         elif t == '*' and a == '/' and not (
-            sq or dq or bt or rb or sb > 0 or cb > 0
+            sq or dq or bt or rb > 0 or sb > 0 or cb > 0
         ):
             a = ''
             bcomment = False
@@ -177,9 +177,9 @@ def tokenise(line):
             if pair[0] == '$' and isnum(pair[1]):
                 del k[-1]
                 k.append('$' + pair[1])
-            elif pair[0] == 'RE' and (pair[1].startswith('"') or pair[1].startswith("'")):
+            elif pair[0] == 're' and (pair[1].startswith('"') or pair[1].startswith("'")):
                 del k[-1]
-                k.append('RE' + pair[1])
+                k.append('re' + pair[1])
             elif isnum(pair[0]) and pair[1][0] == '.' and isnum(pair[1][1:]):
                 del k[-1]
                 k.append(pair[0] + pair[1])
@@ -195,8 +195,8 @@ def tokenise_file(code, split_at=';', dofilter=True):
     sq = False
     dq = False
     bt = False
-    rb = False
     bcomment = False
+    rb = 0
     sb = 0
     cb = 0
     lg = 0
@@ -206,59 +206,59 @@ def tokenise_file(code, split_at=';', dofilter=True):
     t = ''
     for a in code:
         if a == "'" and not (
-            dq or bt or rb or sb > 0 or cb > 0 or lg > 0 or bcomment
+            dq or bt or rb > 0 or sb > 0 or cb > 0 or lg > 0 or bcomment
         ):
             sq = not sq
         elif a == '"' and not (
-            sq or bt or rb or sb > 0 or cb > 0 or lg > 0 or bcomment
+            sq or bt or rb > 0 or sb > 0 or cb > 0 or lg > 0 or bcomment
         ):
             dq = not dq
         elif a == '`' and not (
-            sq or dq or rb or sb > 0 or cb > 0 or lg > 0 or bcomment
+            sq or dq or rb > 0 or sb > 0 or cb > 0 or lg > 0 or bcomment
         ):
             bt = not bt
         elif a == '(' and not (
             sq or dq or bt or sb > 0 or cb > 0 or lg > 0 or bcomment
         ):
-            rb = True
+            rb += 1
         elif a == ')' and not (
             sq or dq or bt or sb > 0 or cb > 0 or lg > 0 or bcomment
         ):
-            rb = False
+            rb -= 1
         elif a == '[' and not (
-            sq or dq or bt or rb or cb > 0 or lg > 0 or bcomment
+            sq or dq or bt or rb > 0 or cb > 0 or lg > 0 or bcomment
         ):
             sb += 1
         elif a == ']' and not (
-            sq or dq or bt or rb or cb > 0 or lg > 0 or bcomment
+            sq or dq or bt or rb > 0 or cb > 0 or lg > 0 or bcomment
         ):
             sb -= 1
         elif a == '{' and not (
-            sq or dq or bt or rb or sb > 0 or lg > 0 or bcomment
+            sq or dq or bt or rb > 0 or sb > 0 or lg > 0 or bcomment
         ):
             cb += 1
         elif a == '}' and not (
-            sq or dq or bt or rb or sb > 0 or lg > 0 or bcomment
+            sq or dq or bt or rb > 0 or sb > 0 or lg > 0 or bcomment
         ):
             cb -= 1
         elif a == '<' and not (
-            sq or dq or bt or rb or sb > 0 or cb > 0 or bcomment
+            sq or dq or bt or rb > 0 or sb > 0 or cb > 0 or bcomment
         ):
             lg += 1
         elif a == '>' and not (
-            sq or dq or bt or rb or sb > 0 or cb > 0 or bcomment
+            sq or dq or bt or rb > 0 or sb > 0 or cb > 0 or bcomment
         ):
             lg -= 1
         elif t == '/' and a == '*' and not (
-            sq or dq or bt or rb or sb > 0 or cb > 0
+            sq or dq or bt or rb > 0 or sb > 0 or cb > 0
         ):
             bcomment = True
         elif t == '*' and a == '/' and not (
-            sq or dq or bt or rb or sb > 0 or cb > 0
+            sq or dq or bt or rb > 0 or sb > 0 or cb > 0
         ):
             bcomment = False
         if a == split_at and not (
-            sq or dq or bt or rb or sb > 0 or cb > 0 or lg > 0 or bcomment
+            sq or dq or bt or rb > 0 or sb > 0 or cb > 0 or lg > 0 or bcomment
         ):
             l.append(o.strip(' \t\v\f\r'))
             o = ''
