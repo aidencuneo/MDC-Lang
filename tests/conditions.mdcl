@@ -1,9 +1,1 @@
-sig ECHO;
-
-compileCode : [code,] => {
-    ret code.split("\n");
-};
-
-code : readfile(argv(1));
-compiled : compileCode(code);
-write(compiled);
+10,,;

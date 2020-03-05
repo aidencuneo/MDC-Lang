@@ -6,7 +6,7 @@ First Commit was at: 1/1/2020.
 '''
 
 _debug_mode = True
-__version__ = '1.6.0'
+__version__ = '1.6.1'
 
 import ast
 import datetime
@@ -229,13 +229,10 @@ class Integer(BaseDatatype):
         super().__init__(self.value)
 
     def __repr__(self):
-        return pformat(self.value)
+        return str(self.value)
 
     def __bool__(self):
         return bool(self.value)
-
-    def call(self):
-        return not self.value, Boolean
 
     def add(self, other):
         mdc_assert(self, other, (Integer, Float, String), 'add')
@@ -322,6 +319,45 @@ class Integer(BaseDatatype):
             return self.value >= len(other.value), Boolean
         if isinstance(other, Boolean):
             return self.value >= other.value.value, Boolean
+
+
+class Binary(BaseDatatype):
+
+    def __init__(self, value):
+        if isinstance(value, tuple):
+            if len(value) == 1:
+                value = value[0]
+        mdc_assert(self, value, (str, int, float) + (
+            Integer, Float, String, Boolean, Null),
+            'bin', showname=False)
+        if isinstance(value, str):
+            try:
+                self.value = int(value, 2)
+            except ValueError:
+                call_error('Value ' + pformat(value) + ' can not '
+                    'be converted into Binary.', 'type')
+        elif isinstance(value, int):
+            self.value = [value, bin(value)] ##########################
+        elif isinstance(value, float):
+            self.value = round(value)
+        elif isinstance(value, Integer):
+            self.value = value.value
+        elif isinstance(value, Float):
+            self.value = round(value.value)
+        elif isinstance(value, String):
+            try:
+                self.value = int(value.value, 2)
+            except ValueError:
+                call_error('String ' + pformat(value) + ' can not '
+                    'be converted into Binary.', 'type')
+        elif isinstance(value, Boolean):
+            self.value = value.value.value
+        elif isinstance(value, Null):
+            self.value = 0
+        super().__init__(self.value)
+
+    def __repr__(self):
+        return self.value + 'b'
 
 
 class Float(BaseDatatype):
@@ -897,7 +933,9 @@ class Boolean(BaseDatatype):
 class Array(BaseDatatype):
 
     def __init__(self, value=None):
-        mdc_assert(self, value, (tuple, list) + builtin_types, 'array', showname=False)
+        mdc_assert(self, value, (type(None), tuple, list) + builtin_types, 'array', showname=False)
+        if isinstance(value, type(None)):
+            self.value = ()
         if isinstance(value, (tuple, list)):
             self.value = tuple(value)
         elif isinstance(value, String):
@@ -1083,6 +1121,10 @@ class MDCLError(Exception):
     pass
 
 
+class MDCLExit(Exception):
+    pass
+
+
 class Debug:
 
     @staticmethod
@@ -1246,11 +1288,17 @@ def eval_statement(code, args, error):
         call_error(str(e), 'eval', error)
 
 
-def start(rawcode, filename=None):
+def start(rawcode, filename=None, exit_on_exc=True):
+    global breadcrumbs
     try:
+        breadcrumbs = []
         run(rawcode, filename, raw=True)
     except MDCLError as e:
         call_error(error_type=e)
+    except MDCLExit:
+        if exit_on_exc:
+            sys.exit()
+        raise MDCLExit()
     except (KeyboardInterrupt, EOFError):
         sig_c.send('SIGINT')
     except RecursionError:
@@ -1458,7 +1506,7 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
             for val in iterable.value:
                 if variable is not None:
                     local_vars[variable] = val
-                local_vars[','] = val
+                local_vars['#'] = val
                 break_token = True
                 ev = evaluate((runcode,), error=code[i], args=localargs, has_breadcrumbs=False)
                 if isinstance(ev, BreakToken):
@@ -1527,6 +1575,8 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                         o += str(ev)
                         if echo:
                             sys.stdout.write(str(ev))
+            except MDCLExit:
+                raise MDCLExit()
             except (KeyboardInterrupt, EOFError):
                 if sig_c.switches['INT']:
                     ev = perform_try_catch(MDCLError('keyboardinterrupt::'), error=code[i], args=localargs)
@@ -1869,6 +1919,7 @@ def evaluate(exp, error=None, args=None, funcargs=False, has_breadcrumbs=True, f
     }
     new = exp[:]
     new = pre_evaluate(new, error=error)
+    array_cont = []
     a = 0
     while a < len(new):
         if isinstance(new[a], datatypes + (type(None),)) and not (
@@ -1933,7 +1984,7 @@ def evaluate(exp, error=None, args=None, funcargs=False, has_breadcrumbs=True, f
                     local_vars[new[a].args[i][0]] = f[i]
             new[a] = new[a].call(f)
             local_vars = deepcopy(oldlocals)
-            del new[a + 1:]
+            del new[a + 1]
         elif new[a] == '!':
             if a + 1 >= len(new):
                 call_error('missing second argument for ! (boolean not) operator.', 'syntax', error)
@@ -1971,6 +2022,13 @@ def evaluate(exp, error=None, args=None, funcargs=False, has_breadcrumbs=True, f
             del new[a + 1]
             del new[a - 1]
             a += 1
+        elif new[a] == ',':
+            if a - 1 < 0:
+                call_error('syntax error, missing value before comma.', 'syntax', error)
+            array_cont += [new[a - 1]]
+            del new[a - 1]
+            del new[a - 1]
+            a -= 2
         elif new[a] == 'and':
             if a - 1 < 0:
                 call_error('and requires a left hand argument.', 'argerr', error)
@@ -2072,9 +2130,17 @@ def evaluate(exp, error=None, args=None, funcargs=False, has_breadcrumbs=True, f
             if not new[a].endswith(')'):
                 call_error('Unmatched ' + pformat('(') + '.', 'syntax', error)
             values = evaluate(replacekeys(loader.tokenise(new[a][1:-1].strip()), args=args), error=error, args=args)
-            if not isinstance(values, (tuple, list)):
-                values = values,
-            new[a] = Array(values)
+            if isinstance(values, tuple):
+                new[a] = Array()
+            else:
+                new[a] = Array((values,))
+            if len(new) > 1 and len(exp) > 1:
+                a -= 1
+        elif new[a].startswith('`') or new[a].endswith('`'):
+            if not new[a].startswith('`') or not new[a].endswith('`'):
+                call_error('Unmatched ' + pformat('`') + '.', 'syntax', error)
+            values = evaluate(replacekeys(loader.tokenise(new[a][1:-1].strip()), args=args), error=error, args=args)
+            new[a] = values
             if len(new) > 1 and len(exp) > 1:
                 a -= 1
         elif new[a].startswith('<') or new[a].endswith('>'):
@@ -2151,15 +2217,27 @@ def evaluate(exp, error=None, args=None, funcargs=False, has_breadcrumbs=True, f
             token = new[a]
             if len(token) > 100:
                 token = token[:97] + '...'
-            call_error('Undefined Token: ' + pformat(token), 'syntax', error)
+            call_error('undefined token: ' + pformat(token), 'syntax', error)
         a += 1
+    if array_cont:
+        if len(new) > 1:
+            call_error('too many values in a row, use commas to separate Array items.', 'syntax', error)
+        if len(new) == 1:
+            array_cont += [new[0]]
+        return translate_datatypes(tuple(array_cont))
     if not new:
         return new
-    if funcargs and len(new) == 1:
-        new = new,
     if len(new) == 1:
+        if funcargs:
+            new = new,
         return translate_datatypes(new[0])
+    if len(new) > 1:
+        call_error('too many values in a row, use commas to separate Array items.', 'syntax', error)
     return translate_datatypes(new)
+
+
+def doMDCLExit():
+    raise MDCLExit()
 
 
 def replacekeys(line, args=None):
@@ -2184,38 +2262,7 @@ def replacekeys(line, args=None):
                     line[a] = Null()
                 else:
                     line[a] = args[key]
-        elif line[a].startswith('`') and line[a].endswith('`'):
-            line[a] = '<EVAL>' + replaceargs(line[a][1:-1]) + '\n\\' + pformat(line[a]) + '</EVAL>'
     return line
-
-
-def replaceargs(code):
-    code = list(code)
-    new = ''
-    arg = 0
-    index = 0
-    current = ''
-    i = 0
-    while i < len(code):
-        if code[i] == '$' and not arg:
-            arg = 1
-            index = i
-        elif arg == 1 and code[i] == '{':
-            arg = 2
-        elif arg == 2 and code[i] in loader.digits:
-            current += code[i]
-        elif arg == 2 and code[i] == '}':
-            code[index:i + 1] = 'args[' + current + ']'
-            arg = 0
-            index = 0
-            current = ''
-            i = index
-        else:
-            arg = 0
-            index = 0
-            current = ''
-        i += 1
-    return ''.join(code)
 
 
 def split_list(s, split_at, astype=None):
@@ -2468,7 +2515,6 @@ mdcl_keywords = (
 )
 
 start_error_tags = error_tags = CompactDict({
-    'eval': 'ERROR attempting to run eval statement',
     'exp': 'ERROR attempting to evaluate expression',
     'ioerr': 'IOERROR',
     'argerr': 'ARGUMENT ERROR',
@@ -2589,7 +2635,10 @@ local_vars = CompactDict({
 
     'exit': BuiltinFunction('exit',
         [],
-        lambda x: (String(''), sys.exit())[0]),
+        lambda x: (
+            String(''),
+            doMDCLExit()
+        )[0]),
 })
 
 datatypes = copy(builtin_types)

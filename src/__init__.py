@@ -18,12 +18,8 @@ for a in sys.argv[1:]:
     else:
         fname += [a]
 
-if not fname and not options:
-    print('No input file given.')
-    sys.exit()
-
 from loader import get_code
-from var import MDCLError, sig_c, get_input, call_error, initialise_path, start, _debug_mode, __version__
+from var import MDCLError, MDCLExit, sig_c, get_input, call_error, initialise_path, start, _debug_mode, __version__
 
 if options:
     if '-v' in options:
@@ -39,8 +35,28 @@ if options:
         code = ' '.join(fname)
         src_path = sys.path[0] if _debug_mode else os.path.dirname(sys.path[0])
         initialise_path(src_path, os.getcwd())
-        start(code)
+        try:
+            start(code)
+        except MDCLExit:
+            pass
         sys.exit()
+elif not fname and not options:
+    import platform
+    pt = platform.system()
+    if pt == 'Darwin':
+        pt = 'Mac OS X'
+    print('MDCL', __version__, 'on', pt, platform.release())
+    while True:
+        i = get_input('\n--> ')
+        if i:
+            try:
+                start(i, exit_on_exc=False)
+            except SystemExit:
+                pass
+            except MDCLExit:
+                sys.exit()
+    sys.exit()
+
 if options:
     print('Command line option ' + options[0] + ' is not recognised.')
     sys.exit()
