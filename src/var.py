@@ -6,7 +6,7 @@ First Commit was at: 1/1/2020.
 '''
 
 _debug_mode = True
-__version__ = '1.6.1'
+__version__ = '1.6.2'
 
 import ast
 import datetime
@@ -170,7 +170,7 @@ class Function(BaseDatatype):
                 args += (Null(),)
         if len(args) > len(self.args):
             call_error('function ' + self.name + ' received ' + str(len(args)) + ' arguments, '
-                'maximum amount for this Function is ' + str(len(self.args)) + '.', 'argerr')
+                'maximum amount for this function is ' + str(len(self.args)) + '.', 'argerr')
         return args
 
     def call(self, args, ex_args=None):
@@ -793,28 +793,31 @@ class Slice(BaseDatatype):
         if ':' in value:
             value = value.split(':')
         else:
-            value = (value, value, '')
+            value = (value, value, False)
         if len(value) > 3:
             call_error('slice received too many arguments, maximum is 3.', 'argerr')
         while len(value) < 3:
-            value += ['']
+            value += [False]
         if not value[0]:
             value[0] = '0'
         if not value[1]:
             value[1] = '.'
         if not value[2]:
             value[2] = '1'
+        for a in range(len(value), 0, -1):
+            value.insert(a, ',')
+        value = list(evaluate(value).value)
         try:
-            value[0] = int(value[0])
+            value[0] = int(value[0].value)
         except ValueError:
             call_error('Non-Integer value found in position 0 of slice.', 'value')
         try:
-            value[1] = int(value[1])
+            value[1] = int(value[1].value)
         except ValueError:
             if value[1] != '.':
                 call_error('Non-Integer value found (or missing dot) in position 1 of slice.', 'value')
         try:
-            value[2] = int(value[2])
+            value[2] = int(value[2].value)
         except ValueError:
             call_error('Non-Integer value found in position 2 of slice.', 'value')
         return value
@@ -1870,11 +1873,12 @@ def pre_evaluate(exp, error=None, dostrings=False):
                 new[a] = RegexString(ast.literal_eval(new[a][2:]))
             except Exception:
                 call_error('Invalid Regex String.', 'syntax', error)
-        elif re.match("^'.*'$", new[a]): # Is new[a] a string with single quotes? If so, assign String() class using RAW value.
+        elif re.match("^'.*'$", convert_escapes(new[a])): # Is new[a] a string with single quotes? If so, assign String() class using RAW value.
             new[a] = String(new[a][1:-1])
-        elif re.match('^".*"$', new[a]): # Is new[a] a string with double quotes? If so, assign evaluated String() class.
+        elif re.match('^".*"$', convert_escapes(new[a])): # Is new[a] a string with double quotes? If so, assign evaluated String() class.
             try:
-                new[a] = String(ast.literal_eval(new[a]))
+                #print(new[a])
+                new[a] = String(ast.literal_eval(convert_escapes(new[a])))
             except Exception:
                 call_error('Invalid String.', 'syntax', error)
         elif re.match('^(-|\+)*[0-9]*\.[0-9]+$', new[a]): # Is new[a] a float? If so, assign Float() class.
@@ -1923,7 +1927,7 @@ def evaluate(exp, error=None, args=None, funcargs=False, has_breadcrumbs=True, f
     a = 0
     while a < len(new):
         if isinstance(new[a], datatypes + (type(None),)) and not (
-            isinstance(new[a], (Array, Slice))
+            isinstance(new[a], Slice)
         ):
             a += 1
             continue
@@ -1951,40 +1955,6 @@ def evaluate(exp, error=None, args=None, funcargs=False, has_breadcrumbs=True, f
                 new[a] = settype(vals[0] if isinstance(vals, tuple) else vals)
                 del new[a - 1]
                 a -= 1
-        elif isinstance(new[a], Array):
-            if a - 1 < 0:
-                a += 1
-                continue
-            if not isinstance(new[a - 1], (Function, BuiltinFunction)):
-                a += 1
-                continue
-            a -= 1
-            thishas = dir(new[a])
-            if 'call' not in thishas:
-                call_error('type ' + type(new[a]).__name__ + ' is not callable.', 'attr', error)
-            if 'args' not in thishas or 'code' not in thishas:
-                vals = new[a].call()
-                settype = vals[1] if isinstance(vals, tuple) else type(vals)
-                new[a] = settype(vals[0] if isinstance(vals, tuple) else vals)
-                a -= 1
-                continue
-            f = new[a + 1].value
-            oldlocals = deepcopy(local_vars)
-            if func_self:
-                local_vars['self'] = new[a]
-            for i in range(len(new[a].args)):
-                if not new[a].args[i]:
-                    continue
-                if i >= len(f) and new[a].args[i][-1] == '*':
-                    f += Null(),
-                elif i >= len(f):
-                    call_error('function ' + new[a].name + ' requires at least ' + str(len(new[a].args[i]))
-                        + ' positional argument' + ('' if len(new[a].args[i]) == 1 else 's') + '.', 'argerr')
-                if '@' not in new[a].args[i]:
-                    local_vars[new[a].args[i][0]] = f[i]
-            new[a] = new[a].call(f)
-            local_vars = deepcopy(oldlocals)
-            del new[a + 1]
         elif new[a] == '!':
             if a + 1 >= len(new):
                 call_error('missing second argument for ! (boolean not) operator.', 'syntax', error)
@@ -2129,13 +2099,54 @@ def evaluate(exp, error=None, args=None, funcargs=False, has_breadcrumbs=True, f
                 call_error('Unmatched ' + pformat(')') + '.', 'syntax', error)
             if not new[a].endswith(')'):
                 call_error('Unmatched ' + pformat('(') + '.', 'syntax', error)
+            temp = False
+            if not a - 1 < 0:
+                if isinstance(new[a - 1], (Function, BuiltinFunction)):
+                    temp = True
+            if not temp:
+                values = evaluate(replacekeys(loader.tokenise(new[a][1:-1].strip()), args=args), error=error, args=args)
+                if isinstance(values, tuple):
+                    new[a] = Array()
+                else:
+                    new[a] = Array((values,))
+                if len(new) > 1 and len(exp) > 1:
+                    a -= 1
+                a += 1
+                continue
             values = evaluate(replacekeys(loader.tokenise(new[a][1:-1].strip()), args=args), error=error, args=args)
             if isinstance(values, tuple):
-                new[a] = Array()
+                values = Array()
             else:
-                new[a] = Array((values,))
-            if len(new) > 1 and len(exp) > 1:
+                values = Array((values,))
+            new[a] = values
+            a -= 1
+            thishas = dir(new[a])
+            if 'call' not in thishas:
+                print(new)
+                call_error('type ' + type(new[a]).__name__ + ' is not callable.', 'attr', error)
+            if 'args' not in thishas or 'code' not in thishas:
+                vals = new[a].call()
+                settype = vals[1] if isinstance(vals, tuple) else type(vals)
+                new[a] = settype(vals[0] if isinstance(vals, tuple) else vals)
                 a -= 1
+                continue
+            f = new[a + 1].value
+            oldlocals = deepcopy(local_vars)
+            if func_self:
+                local_vars['self'] = new[a]
+            for i in range(len(new[a].args)):
+                if not new[a].args[i]:
+                    continue
+                if i >= len(f) and new[a].args[i][-1] == '*':
+                    f += Null(),
+                elif i >= len(f):
+                    call_error('function ' + new[a].name + ' requires at least ' + str(len(new[a].args[i]))
+                        + ' positional argument' + ('' if len(new[a].args[i]) == 1 else 's') + '.', 'argerr')
+                if '@' not in new[a].args[i]:
+                    local_vars[new[a].args[i][0]] = f[i]
+            new[a] = new[a].call(f)
+            local_vars = deepcopy(oldlocals)
+            del new[a + 1]
         elif new[a].startswith('`') or new[a].endswith('`'):
             if not new[a].startswith('`') or not new[a].endswith('`'):
                 call_error('Unmatched ' + pformat('`') + '.', 'syntax', error)
@@ -2186,12 +2197,11 @@ def evaluate(exp, error=None, args=None, funcargs=False, has_breadcrumbs=True, f
                 call_error('Unmatched ' + pformat(']') + '.', 'syntax')
             if not new[a].endswith(']'):
                 call_error('Unmatched ' + pformat('[') + '.', 'syntax')
-            b = [z.strip() for z in new[a][1:-1].split(':') if z.strip()]
-            if not b:
+            if not new[a][1:-1].strip():
                 new[a] = Arglist(new[a])
             elif ',' in new[a]:
                 new[a] = Arglist(new[a])
-            elif all([re.match('^(-|\+)*[0-9]+$', z) for z in b]):
+            elif ':' in new[a]:
                 new[a] = Slice(new[a])
             else:
                 call_error('Invalid syntax for bracket expression: ' + pformat(new[a]), 'syntax', error)
@@ -2238,6 +2248,17 @@ def evaluate(exp, error=None, args=None, funcargs=False, has_breadcrumbs=True, f
 
 def doMDCLExit():
     raise MDCLExit()
+
+
+def convert_escapes(quoted_string):
+    return (quoted_string
+        .replace('\a', '\\a')
+        .replace('\b', '\\b')
+        .replace('\f', '\\f')
+        .replace('\n', '\\n')
+        .replace('\r', '\\r')
+        .replace('\t', '\\t')
+    )
 
 
 def replacekeys(line, args=None):
@@ -2314,18 +2335,18 @@ class BFList:
     @staticmethod
     def readfile(args):
         if not isinstance(args[0], String):
-            call_error('READFILE first argument must be of type String.', 'argerr')
+            call_error('readfile first argument must be of type String.', 'argerr')
         try:
             with open(args[0].value, 'rb') as f:
                 data = f.read()
             data = data.decode('utf-8').replace('\r\n', '\n')
             return String(data)
         except UnicodeDecodeError:
-            call_error('READFILE failed to decode file encoding from: "' + str(args[0]) + '".', 'ioerr')
+            call_error('readfile failed to decode file encoding from: "' + str(args[0]) + '".', 'ioerr')
         except FileNotFoundError:
             call_error('A file at path: "' + str(args[0]) + '" does not exist.', 'filenotfound')
         except Exception:
-            call_error('READFILE failed to read from the file at path: "' + str(args[0]) + '"', 'ioerr')
+            call_error('readfile failed to read from the file at path: "' + str(args[0]) + '"', 'ioerr')
 
     @staticmethod
     def writefile(args):
