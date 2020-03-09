@@ -6,7 +6,7 @@ First Commit was at: 1/1/2020.
 '''
 
 _debug_mode = True
-__version__ = '1.6.2'
+__version__ = '1.6.3'
 
 import ast
 import datetime
@@ -2108,7 +2108,7 @@ def evaluate(exp, error=None, args=None, funcargs=False, has_breadcrumbs=True, f
                 if isinstance(values, tuple):
                     new[a] = Array()
                 else:
-                    new[a] = Array((values,))
+                    new[a] = values
                 if len(new) > 1 and len(exp) > 1:
                     a -= 1
                 a += 1
@@ -2242,7 +2242,14 @@ def evaluate(exp, error=None, args=None, funcargs=False, has_breadcrumbs=True, f
             new = new,
         return translate_datatypes(new[0])
     if len(new) > 1:
-        call_error('too many values in a row, use commas to separate Array items.', 'syntax', error)
+        for a in range(len(new), 0, -1):
+            new.insert(a, 'mult')
+        return evaluate(new[:-1],
+            error=error,
+            args=args,
+            funcargs=funcargs,
+            has_breadcrumbs=has_breadcrumbs,
+            func_self=func_self)
     return translate_datatypes(new)
 
 

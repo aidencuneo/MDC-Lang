@@ -1,5 +1,2 @@
-a : to 50;
-num : 5;
-end : 43;
-
-a[num:end:num];
+x : 20;
+2((x));
