@@ -1,0 +1,3 @@
+printstuff : [] => {
+    write('some STUFF.');
+};

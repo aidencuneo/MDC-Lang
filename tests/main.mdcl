@@ -1,0 +1,5 @@
+sig ECHO;
+
+import 'var';
+
+var.printstuff();

@@ -6,7 +6,7 @@ First Commit was at: 1/1/2020.
 '''
 
 _debug_mode = True
-__version__ = '1.6.3'
+__version__ = '1.6.4'
 
 import ast
 import datetime
@@ -233,6 +233,9 @@ class Integer(BaseDatatype):
 
     def __bool__(self):
         return bool(self.value)
+
+    def foriter(self):
+        return Array(translate_datatypes(tuple(range(self.value))))
 
     def add(self, other):
         mdc_assert(self, other, (Integer, Float, String), 'add')
@@ -786,14 +789,16 @@ class Slice(BaseDatatype):
         return self.display()
 
     def display(self):
-        return '[' + ':'.join([str(a) for a in self.value]) + ']'
+        if self.value[0] == self.value[1] and self.value[2] == 1:
+            return '[' + pformat(self.value[0]) + ']'
+        return '[' + ':'.join([pformat(a) for a in self.value]) + ']'
 
     def make_slice(self, value):
         value = value.strip('[]')
         if ':' in value:
             value = value.split(':')
         else:
-            value = (value, value, False)
+            value = [value, value, False]
         if len(value) > 3:
             call_error('slice received too many arguments, maximum is 3.', 'argerr')
         while len(value) < 3:
@@ -807,19 +812,21 @@ class Slice(BaseDatatype):
         for a in range(len(value), 0, -1):
             value.insert(a, ',')
         value = list(evaluate(value).value)
+        is_multi = True
         try:
             value[0] = int(value[0].value)
         except ValueError:
-            call_error('Non-Integer value found in position 0 of slice.', 'value')
+            is_multi = False
         try:
             value[1] = int(value[1].value)
         except ValueError:
-            if value[1] != '.':
+            if is_multi and value[1] != '.':
                 call_error('Non-Integer value found (or missing dot) in position 1 of slice.', 'value')
         try:
             value[2] = int(value[2].value)
         except ValueError:
-            call_error('Non-Integer value found in position 2 of slice.', 'value')
+            if is_multi:
+                call_error('Non-Integer value found in position 2 of slice.', 'value')
         return value
 
     def do_slice(self, obj):
@@ -936,11 +943,13 @@ class Boolean(BaseDatatype):
 class Array(BaseDatatype):
 
     def __init__(self, value=None):
-        mdc_assert(self, value, (type(None), tuple, list) + builtin_types, 'array', showname=False)
+        mdc_assert(self, value, (type(None), tuple, list, CompactList) + builtin_types, 'array', showname=False)
         if isinstance(value, type(None)):
             self.value = ()
         if isinstance(value, (tuple, list)):
             self.value = tuple(value)
+        elif isinstance(value, CompactList):
+            self.value = value._value
         elif isinstance(value, String):
             self.value = tuple(String(a) for a in value.value)
         elif isinstance(value, Array):
@@ -992,6 +1001,27 @@ class Array(BaseDatatype):
     def has(self, other):
         mdc_assert(self, other, builtin_types, 'has')
         return any(a.value == other.value for a in self.value), Boolean
+
+
+class Module(BaseDatatype):
+
+    def __init__(self, name, data):
+        self.value = os.path.abspath(name)
+        self.data = data
+
+    def __repr__(self):
+        return '<Module ' + self.value + '>'
+
+    def __str__(self):
+        return '<Module( ' + ', '.join(str(a) + ': ' + pformat(self.data[a]) for a in self.data) + ' )>'
+
+    def foriter(self):
+        return Array(translate_datatypes(self.data.keys()))
+
+    def index(self, slc):
+        if slc.value[0].value not in self.data:
+            call_error('key ' + pformat(slc.value[0].value) + ' does not exist.', 'key')
+        return self.data[slc.value[0].value]
 
 
 class Null(BaseDatatype):
@@ -1191,6 +1221,96 @@ def initialise_global_vars(file=None):
     global_vars[','] = Null()
 
 
+def initialise_local_vars():
+    global local_vars
+    local_vars = CompactDict({
+        'int': BuiltinFunction('int',
+            [['@', '*']],
+            Integer),
+        'float': BuiltinFunction('float',
+            [['@', '*']],
+            Float),
+        'string': BuiltinFunction('string',
+            [['@', '*']],
+            String),
+        'regex': BuiltinFunction('regex',
+            [[String, '*']],
+            RegexString),
+        'timedelta': BuiltinFunction('timedelta',
+            [['@', '*']],
+            Timedelta),
+        'date': BuiltinFunction('date',
+            [['@', '*']],
+            Date),
+        'slice': BuiltinFunction('slice',
+            [['@', '*']],
+            Slice),
+        'bool': BuiltinFunction('bool',
+            [['@', '*']],
+            Boolean),
+
+        'read': BuiltinFunction('read',
+            [[String, '*']],
+            BFList.read),
+        'len': BuiltinFunction('len',
+            [[String, Array]],
+            BFList.get_length),
+        'readfile': BuiltinFunction('readfile',
+            [[String]],
+            BFList.readfile),
+        'writefile': BuiltinFunction('writefile',
+            [[String], [String]],
+            BFList.writefile),
+        'type': BuiltinFunction('type',
+            [['@']],
+            BFList.get_type),
+        'echo': BuiltinFunction('echo',
+            [['@', '*']],
+            BFList.echo),
+        'write': BuiltinFunction('write',
+            [['@', '*'], ['@', '*'], ['@', '*']],
+            BFList.write),
+        'wait': BuiltinFunction('wait',
+            [[Integer, Float]],
+            BFList.wait),
+        'globals': BuiltinFunction('globals',
+            [],
+            BFList.get_globals),
+        'locals': BuiltinFunction('locals',
+            [],
+            BFList.get_locals),
+        'argv': BuiltinFunction('argv',
+            [[Integer, '*']],
+            BFList.get_argv),
+        'getdata': BuiltinFunction('getdata',
+            [['@']],
+            BFList.get_data),
+        'exec': BuiltinFunction('exec',
+            [['@']],
+            BFList._exec),
+        'eval': BuiltinFunction('eval',
+            [['@']],
+            BFList._eval),
+        'assign': BuiltinFunction('assign',
+            [['@'], ['@']],
+            BFList._assign),
+
+        'pyeval': BuiltinFunction('pyeval',
+            [['@']],
+            lambda x: eval(str(x[0].value), globals())),
+        'pyexec': BuiltinFunction('pyexec',
+            [['@']],
+            lambda x: exec(str(x[0].value), globals())),
+
+        'exit': BuiltinFunction('exit',
+            [],
+            lambda x: (
+                String(''),
+                doMDCLExit()
+            )[0]),
+    })
+
+
 def call_error(text=None, error_type=None, line=None, args=None, showfile=True):
     original_error = error_type
     if isinstance(error_type, MDCLError):
@@ -1289,6 +1409,28 @@ def eval_statement(code, args, error):
         if isinstance(e, SystemExit):
             print('\nThe following error occurred as a result of the above error:')
         call_error(str(e), 'eval', error)
+
+
+def import_module(fname):
+    global current_file
+    global current_code
+    global current_line
+    global local_vars
+    newcode = loader.get_code(fname)
+    if isinstance(newcode, Exception):
+        return
+    oldfile = current_file
+    oldcode = current_code
+    oldline = current_line
+    oldlocals = deepcopy(local_vars)
+    initialise_local_vars()
+    run(newcode, fname, raw=True)
+    current_file = oldfile
+    current_code = oldcode
+    current_line = oldline
+    module = Module(fname, deepcopy(local_vars))
+    local_vars = oldlocals
+    return module
 
 
 def start(rawcode, filename=None, exit_on_exc=True):
@@ -1499,10 +1641,11 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                 call_error('for loop var names can not be reserved names.', 'var')
             if not runcode:
                 call_error('for loop code to run can not be empty.', 'syntax')
-            if isinstance(iterable, Integer):
-                iterable = Array(translate_datatypes(tuple(range(iterable.value))))
-            else:
-                iterable = Array(iterable)
+            if 'foriter' not in dir(iterable):
+                call_error('type ' + type(iterable).__name__ + ' is not iterable.', 'type')
+            iterable = iterable.foriter()
+            if not isinstance(iterable, Array):
+                call_error('type ' + type(iterable).__name__ + ' foriter function does not return Array.', 'type')
             oldvariable = None
             if variable in local_vars:
                 oldvariable = local_vars[variable]
@@ -1657,8 +1800,10 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                     value = Null()
                 elif value:
                     value = translate_datatypes(value[0])
-            if key[2:] or not key:
+            if key[2:]:
                 call_error('invalid settatr syntax.', 'syntax')
+            elif not key:
+                key = ['']
             if key[1:]:
                 if oper != ':' and key[0] not in local_vars:
                     call_error('undefined token: ' + pformat(key[0]), 'syntax', code[i])
@@ -1697,42 +1842,36 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                     value = do_action(local_vars[key[0]], 'mult', value, error=code[i])
                 elif oper == '/:':
                     value = do_action(local_vars[key[0]], 'div', value, error=code[i])
-                local_vars[key[0]] = value
+                if key[0]:
+                    local_vars[key[0]] = value
         elif a[0] == 'del':
             if len(a) < 2:
-                call_error('Del statement missing variable or key to delete.', 'argerr')
+                call_error('del statement missing variable or key to delete.', 'argerr')
             key = ''.join(a[1:])
             if key in local_vars:
                 if isinstance(local_vars[key], BuiltinFunction):
-                    call_error('Del statement can not delete built-in functions.', 'argerr')
+                    call_error('del statement can not delete built-in functions.', 'argerr')
                 del local_vars[key]
             elif key in global_vars:
-                call_error('Del statement can not delete global arguments.', 'argerr')
+                call_error('del statement can not delete global arguments.', 'argerr')
         elif a[0] == 'import':
             if len(a) < 2:
-                call_error('Import requires at least one argument.', 'argerr')
-            fnames = evaluate(a[1:], error=code[i], args=localargs)
+                call_error('import requires at least one argument.', 'argerr')
+            fnames = as_tuple(evaluate(a[1:], error=code[i], args=localargs))
             if any(not isinstance(f, String) for f in fnames):
-                call_error('Import arguments must be of type String.', 'type')
+                call_error('import arguments must be of type String.', 'type')
             for fname in fnames:
                 for b in global_vars['PATH'].value:
-                    c = String(str(b.value) + '/' + str(fname.value))
-                    f = c.value
+                    f = String(str(b.value) + '/' + str(fname.value)).value
                     if not f.endswith('.mdcl'):
                         f += '.mdcl'
-                    newcode = loader.get_code(f)
-                    if isinstance(newcode, Exception):
+                    newmodule = import_module(f)
+                    if newmodule is None:
                         continue
-                    oldfile = current_file
-                    oldcode = current_code
-                    oldline = current_line
-                    run(newcode, f, raw=True)
-                    current_file = oldfile
-                    current_code = oldcode
-                    current_line = oldline
+                    local_vars[fname.value] = newmodule
                     break
                 else:
-                    call_error('No scripts within directory ' + pformat(b.value) + ' could be found or imported from.', 'import')
+                    call_error('import could not find module ' + pformat(fname) + ' in PATH.', 'import')
         elif a[0] == 'sig':
             if len(a) < 2:
                 call_error('sig requires at least a signal name.', 'argerr')
@@ -1756,9 +1895,9 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
             if len(a) > 2:
                 errortext = a[2]
             if not isinstance(errortag, String):
-                call_error('Error type to raise must be of type String.', 'type')
+                call_error('error type to raise must be of type String.', 'type')
             if not isinstance(errortext, String):
-                call_error('Error text must be of type String', 'type')
+                call_error('error text must be of type String', 'type')
             ev = perform_try_catch(MDCLError(errortag.value + '::' + errortext.value), error=code[i], args=localargs)
             if isinstance(ev, BreakToken):
                 return ev
@@ -1772,19 +1911,19 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
         elif a[0] == 'errortag':
             a = evaluate_line(a, start=1, error=code[i], args=localargs)
             if len(a) < 2:
-                call_error('Errortag requires at least an error type name.', 'argerr')
+                call_error('errortag requires at least an error type name.', 'argerr')
             errortype = a[1]
             errortag = String('')
             if len(a) > 2:
                 errortag = a[2]
             if not isinstance(errortype, String):
-                call_error('Error type to set tag for must be of type String.', 'type')
+                call_error('error type to set tag for must be of type String.', 'type')
             if not isinstance(errortag, String):
-                call_error('Error tag must be of type String.', 'type')
+                call_error('error tag must be of type String.', 'type')
             if errortype.value in error_tags and errortag.value:
-                call_error('An error tag with that name already exists.', 'type')
+                call_error('an error tag with that name already exists.', 'type')
             if errortype.value in start_error_tags:
-                call_error('Built-in errortags are readonly.', 'readonly')
+                call_error('built-in errortags are readonly.', 'readonly')
             if errortag.value:
                 error_tags[errortype.value] = errortag.value
             else:
@@ -1904,7 +2043,7 @@ def evaluate_line(oldline, start, end=None, error=None, args=None):
     return oldline
 
 
-def evaluate(exp, error=None, args=None, funcargs=False, has_breadcrumbs=True, func_self=True):
+def evaluate(exp, error=None, args=None, funcargs=False, has_breadcrumbs=True, func_self=True, translate=True):
     global current_file
     global current_code
     global current_line
@@ -2113,9 +2252,9 @@ def evaluate(exp, error=None, args=None, funcargs=False, has_breadcrumbs=True, f
                     a -= 1
                 a += 1
                 continue
-            values = evaluate(replacekeys(loader.tokenise(new[a][1:-1].strip()), args=args), error=error, args=args)
+            values = evaluate(replacekeys(loader.tokenise(new[a][1:-1].strip()), args=args), error=error, args=args, translate=False)
             if isinstance(values, tuple):
-                values = Array()
+                values = Array(values)
             else:
                 values = Array((values,))
             new[a] = values
@@ -2201,10 +2340,8 @@ def evaluate(exp, error=None, args=None, funcargs=False, has_breadcrumbs=True, f
                 new[a] = Arglist(new[a])
             elif ',' in new[a]:
                 new[a] = Arglist(new[a])
-            elif ':' in new[a]:
+            else: # ':' in new[a]
                 new[a] = Slice(new[a])
-            else:
-                call_error('Invalid syntax for bracket expression: ' + pformat(new[a]), 'syntax', error)
             a -= 1
         elif new[a] == 'array':
             contents = new[a + 1] if a < len(new) - 1 else []
@@ -2222,7 +2359,7 @@ def evaluate(exp, error=None, args=None, funcargs=False, has_breadcrumbs=True, f
             new[a] = global_vars[new[a]]
             a -= 1
         elif new[a] in reserved_names:
-            call_error('Invalid syntactical usage of reserved name.', 'syntax')
+            call_error('invalid syntactical usage of reserved name.', 'syntax')
         else:
             token = new[a]
             if len(token) > 100:
@@ -2234,7 +2371,7 @@ def evaluate(exp, error=None, args=None, funcargs=False, has_breadcrumbs=True, f
             call_error('too many values in a row, use commas to separate Array items.', 'syntax', error)
         if len(new) == 1:
             array_cont += [new[0]]
-        return translate_datatypes(tuple(array_cont))
+        return translate_datatypes(tuple(array_cont)) if translate else tuple(array_cont)
     if not new:
         return new
     if len(new) == 1:
@@ -2250,7 +2387,7 @@ def evaluate(exp, error=None, args=None, funcargs=False, has_breadcrumbs=True, f
             funcargs=funcargs,
             has_breadcrumbs=has_breadcrumbs,
             func_self=func_self)
-    return translate_datatypes(new)
+    return translate_datatypes(new) if translate else new
 
 
 def doMDCLExit():
@@ -2351,7 +2488,7 @@ class BFList:
         except UnicodeDecodeError:
             call_error('readfile failed to decode file encoding from: "' + str(args[0]) + '".', 'ioerr')
         except FileNotFoundError:
-            call_error('A file at path: "' + str(args[0]) + '" does not exist.', 'filenotfound')
+            call_error('file at path: "' + str(args[0]) + '" does not exist.', 'filenotfound')
         except Exception:
             call_error('readfile failed to read from the file at path: "' + str(args[0]) + '"', 'ioerr')
 
@@ -2430,6 +2567,12 @@ class BFList:
     def _eval(args):
         mdc_assert(None, args[0], String, 'eval', showname=False)
         return evaluate(loader.tokenise(args[0].value))
+
+    @staticmethod
+    def _assign(args):
+        mdc_assert(None, args[0], String, 'assign', showname=False)
+        local_vars[args[0].value] = args[1]
+        return Null()
 
 
 #
@@ -2577,6 +2720,7 @@ datatypes_switch = {
     bool: Boolean,
     tuple: Array,
     list: Array,
+    CompactList: Array,
     type(None): Null,
     types.FunctionType: BuiltinFunction,
 }
@@ -2585,89 +2729,12 @@ builtin_types = tuple(set(datatypes_switch.values())) + (
     Slice,
     Function,
     Arglist,
+    Module,
     BreakToken,
 )
 
-local_vars = CompactDict({
-    'int': BuiltinFunction('int',
-        [['@', '*']],
-        Integer),
-    'float': BuiltinFunction('float',
-        [['@', '*']],
-        Float),
-    'string': BuiltinFunction('string',
-        [['@', '*']],
-        String),
-    'regex': BuiltinFunction('regex',
-        [[String, '*']],
-        RegexString),
-    'timedelta': BuiltinFunction('timedelta',
-        [['@', '*']],
-        Timedelta),
-    'date': BuiltinFunction('date',
-        [['@', '*']],
-        Date),
-    'slice': BuiltinFunction('slice',
-        [['@', '*']],
-        Slice),
-    'bool': BuiltinFunction('bool',
-        [['@', '*']],
-        Boolean),
-
-    'read': BuiltinFunction('read',
-        [[String, '*']],
-        BFList.read),
-    'len': BuiltinFunction('len',
-        [[String, Array]],
-        BFList.get_length),
-    'readfile': BuiltinFunction('readfile',
-        [[String]],
-        BFList.readfile),
-    'writefile': BuiltinFunction('writefile',
-        [[String], [String]],
-        BFList.writefile),
-    'type': BuiltinFunction('type',
-        [['@']],
-        BFList.get_type),
-    'echo': BuiltinFunction('echo',
-        [['@', '*']],
-        BFList.echo),
-    'write': BuiltinFunction('write',
-        [['@', '*'], ['@', '*'], ['@', '*']],
-        BFList.write),
-    'wait': BuiltinFunction('wait',
-        [[Integer, Float]],
-        BFList.wait),
-    'globals': BuiltinFunction('globals',
-        [],
-        BFList.get_globals),
-    'locals': BuiltinFunction('locals',
-        [],
-        BFList.get_locals),
-    'argv': BuiltinFunction('argv',
-        [[Integer, '*']],
-        BFList.get_argv),
-    'getdata': BuiltinFunction('getdata',
-        [['@']],
-        BFList.get_data),
-    'exec': BuiltinFunction('exec',
-        [['@']],
-        BFList._exec),
-    'eval': BuiltinFunction('eval',
-        [['@']],
-        BFList._eval),
-
-    'not': BuiltinFunction('not',
-        [['@']],
-        lambda x: Boolean(not x.value)),
-
-    'exit': BuiltinFunction('exit',
-        [],
-        lambda x: (
-            String(''),
-            doMDCLExit()
-        )[0]),
-})
+local_vars = None
+initialise_local_vars()
 
 datatypes = copy(builtin_types)
 global_vars = CompactDict()
