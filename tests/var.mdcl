@@ -1,3 +1,0 @@
-printstuff : [] => {
-    write('some STUFF.');
-};

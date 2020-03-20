@@ -6,7 +6,7 @@ First Commit was at: 1/1/2020.
 '''
 
 _debug_mode = True
-__version__ = '1.6.4'
+__version__ = '1.6.5'
 
 import ast
 import datetime
@@ -548,6 +548,9 @@ class String(BaseDatatype):
     def call(self):
         return not self.value, Boolean
 
+    def foriter(self):
+        return Array(tuple(String(a) for a in self.value))
+
     def add(self, other):
         mdc_assert(self, other, datatypes, 'add')
         if isinstance(other, (Integer, Float)):
@@ -689,7 +692,7 @@ class RegexString(BaseDatatype):
         super().__init__(self.value)
 
     def __repr__(self):
-        return 'RE' + pformat(self.value.pattern)
+        return 'x' + pformat(self.value.pattern)
 
     def call(self):
         return not self.value, Boolean
@@ -806,7 +809,7 @@ class Slice(BaseDatatype):
         if not value[0]:
             value[0] = '0'
         if not value[1]:
-            value[1] = '.'
+            value[1] = '-1'
         if not value[2]:
             value[2] = '1'
         for a in range(len(value), 0, -1):
@@ -820,8 +823,8 @@ class Slice(BaseDatatype):
         try:
             value[1] = int(value[1].value)
         except ValueError:
-            if is_multi and value[1] != '.':
-                call_error('Non-Integer value found (or missing dot) in position 1 of slice.', 'value')
+            if is_multi and value[1] != -1:
+                call_error('Non-Integer value found in position 1 of slice.', 'value')
         try:
             value[2] = int(value[2].value)
         except ValueError:
@@ -832,9 +835,11 @@ class Slice(BaseDatatype):
     def do_slice(self, obj):
         if isinstance(obj, (String, Array)):
             start = self.value[0]
-            stop = len(obj.value) if self.value[1] == '.' else self.value[1]
+            stop = len(obj.value) if self.value[1] == -1 else self.value[1]
             skip = self.value[2]
-            if start and stop < len(obj.value) and skip != 1:
+            if start == stop and skip == 1:
+                newval = obj.value[start]
+            elif start and stop < len(obj.value) and skip != 1:
                 newval = obj.value[start:stop:skip]
             elif start and stop < len(obj.value):
                 newval = obj.value[start:stop]
@@ -848,10 +853,12 @@ class Slice(BaseDatatype):
                 newval = obj.value[:stop:skip]
             elif skip != 1:
                 newval = obj.value[::skip]
+            else:
+                newval = obj.value[:]
             if isinstance(obj, String):
                 return String(newval)
             if isinstance(obj, Array):
-                return Array(newval)
+                return translate_datatypes(newval)
         if not 'index' in dir(obj):
             call_error('Datatype ' + type(obj).__name__ + ' does not have an index method to deal with slice.', 'attr')
         if isinstance(obj.index, (Function, BuiltinFunction)):
@@ -865,7 +872,7 @@ class Arglist(BaseDatatype):
         if isinstance(value, tuple):
             if len(value) == 1:
                 value = value[0]
-        mdc_assert(self, value, (str, String, Arglist), 'ARGTYPES', showname=False)
+        mdc_assert(self, value, (str, String, Arglist), 'argtypes', showname=False)
         if isinstance(value, str):
             self.value = self.make_arglist(value)
         elif isinstance(value, String):
@@ -1031,9 +1038,6 @@ class Null(BaseDatatype):
         super().__init__(self.value)
 
     def __repr__(self):
-        return pformat('null')
-
-    def __str__(self):
         return 'null'
 
     def __bool__(self):
@@ -1144,10 +1148,10 @@ class BreakToken(BaseDatatype):
         super().__init__(self.value)
 
     def __repr__(self):
-        return pformat('BREAK')
+        return '\'break\''
 
     def __str__(self):
-        return 'BREAK'
+        return 'break'
 
 
 class MDCLError(Exception):
@@ -1641,15 +1645,18 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
                 call_error('for loop var names can not be reserved names.', 'var')
             if not runcode:
                 call_error('for loop code to run can not be empty.', 'syntax')
-            if 'foriter' not in dir(iterable):
-                call_error('type ' + type(iterable).__name__ + ' is not iterable.', 'type')
-            iterable = iterable.foriter()
             if not isinstance(iterable, Array):
-                call_error('type ' + type(iterable).__name__ + ' foriter function does not return Array.', 'type')
+                if 'foriter' not in dir(iterable):
+                    call_error('type ' + type(iterable).__name__ + ' is not iterable.', 'type')
+                iterable = iterable.foriter()
+            if isinstance(iterable, Array):
+                iterable = iterable.value
+            if not isinstance(iterable, tuple):
+                call_error('type ' + type(iterable).__name__ + ' foriter function does not return an iterable.', 'type')
             oldvariable = None
             if variable in local_vars:
                 oldvariable = local_vars[variable]
-            for val in iterable.value:
+            for val in iterable:
                 if variable is not None:
                     local_vars[variable] = val
                 local_vars['#'] = val
@@ -2007,9 +2014,9 @@ def pre_evaluate(exp, error=None, dostrings=False):
             del new[a]
             del new[a]
             a -= 1
-        elif re.match('^re(\'|").+(\'|")', new[a]): # Is new[a] a Regex String? If so, assign Regex() class.
+        elif re.match('^x(\'|").*(\'|")', new[a]): # Is new[a] a Regex String? If so, assign Regex() class.
             try:
-                new[a] = RegexString(ast.literal_eval(new[a][2:]))
+                new[a] = RegexString(ast.literal_eval(new[a][1:]))
             except Exception:
                 call_error('Invalid Regex String.', 'syntax', error)
         elif re.match("^'.*'$", convert_escapes(new[a])): # Is new[a] a string with single quotes? If so, assign String() class using RAW value.
@@ -2059,6 +2066,8 @@ def evaluate(exp, error=None, args=None, funcargs=False, has_breadcrumbs=True, f
         '^': 'pwr',
         '%': 'mod',
         '=': 'eq',
+        '>=': 'ge',
+        '<=': 'le',
     }
     new = exp[:]
     new = pre_evaluate(new, error=error)
@@ -2133,6 +2142,7 @@ def evaluate(exp, error=None, args=None, funcargs=False, has_breadcrumbs=True, f
             a += 1
         elif new[a] == ',':
             if a - 1 < 0:
+                raise a
                 call_error('syntax error, missing value before comma.', 'syntax', error)
             array_cont += [new[a - 1]]
             del new[a - 1]
@@ -2293,23 +2303,23 @@ def evaluate(exp, error=None, args=None, funcargs=False, has_breadcrumbs=True, f
             new[a] = values
             if len(new) > 1 and len(exp) > 1:
                 a -= 1
-        elif new[a].startswith('<') or new[a].endswith('>'):
-            if not new[a].startswith('<'):
-                call_error('Unmatched ' + pformat('>') + '.', 'syntax', error)
-            if not new[a].endswith('>'):
-                call_error('Unmatched ' + pformat('<') + '.', 'syntax', error)
-            if a - 1 < 0:
-                call_error('Shorthand condition requires a left hand argument.', 'argerr', error)
-            if a + 1 >= len(new):
-                call_error('Shorthand condition requires a right hand argument.', 'argerr', error)
-            condition = evaluate(replacekeys(loader.tokenise(new[a][1:-1].strip()), args=args), error=error, args=args)
-            r = replacekeys(loader.tokenise(new[a][1:-1].strip()), args=args)
-            left = evaluate(replacekeys([new[a - 1]], args=args), error=error, args=args)
-            right = evaluate(replacekeys([new[a + 1]], args=args), error=error, args=args)
-            del new[a + 1]
-            del new[a - 1]
-            a -= 1
-            new[a] = left if bool(Boolean(condition)) else right
+        # elif new[a].startswith('<') or new[a].endswith('>'):
+        #     if not new[a].startswith('<'):
+        #         call_error('Unmatched ' + pformat('>') + '.', 'syntax', error)
+        #     if not new[a].endswith('>'):
+        #         call_error('Unmatched ' + pformat('<') + '.', 'syntax', error)
+        #     if a - 1 < 0:
+        #         call_error('Shorthand condition requires a left hand argument.', 'argerr', error)
+        #     if a + 1 >= len(new):
+        #         call_error('Shorthand condition requires a right hand argument.', 'argerr', error)
+        #     condition = evaluate(replacekeys(loader.tokenise(new[a][1:-1].strip()), args=args), error=error, args=args)
+        #     r = replacekeys(loader.tokenise(new[a][1:-1].strip()), args=args)
+        #     left = evaluate(replacekeys([new[a - 1]], args=args), error=error, args=args)
+        #     right = evaluate(replacekeys([new[a + 1]], args=args), error=error, args=args)
+        #     del new[a + 1]
+        #     del new[a - 1]
+        #     a -= 1
+        #     new[a] = left if bool(Boolean(condition)) else right
         elif new[a].startswith('{') or new[a].endswith('}'):
             if not new[a].startswith('{'):
                 call_error('Unmatched ' + pformat('}') + '.', 'syntax')
@@ -2479,7 +2489,7 @@ class BFList:
     @staticmethod
     def readfile(args):
         if not isinstance(args[0], String):
-            call_error('readfile first argument must be of type String.', 'argerr')
+            call_error('readfile first argument must be of type String, ' + type(args[0]).__name__ + ' is invalid.', 'argerr')
         try:
             with open(args[0].value, 'rb') as f:
                 data = f.read()
@@ -2494,7 +2504,16 @@ class BFList:
 
     @staticmethod
     def writefile(args):
-        pass
+        if not isinstance(args[0], String):
+            call_error('writefile first argument must be of type String, ' + type(args[0]).__name__ + ' is invalid.', 'argerr')
+        if not isinstance(args[1], String):
+            call_error('writefile second argument must be of type String, ' + type(args[1]).__name__ + ' is invalid.', 'argerr')
+        try:
+            with open(args[0].value, 'w') as f:
+                f.write(args[1].value)
+            return Integer(len(args[1].value))
+        except Exception:
+            call_error('writefile failed to write to file at path: "' + str(args[0]) + '"', 'ioerr')
 
     @staticmethod
     def get_type(args):
@@ -2540,6 +2559,8 @@ class BFList:
         if isinstance(args[0], Integer):
             if args[0].value < len(global_args):
                 return global_args[args[0].value]
+            else:
+                return Null()
         return Array(global_args)
 
     @staticmethod

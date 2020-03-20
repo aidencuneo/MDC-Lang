@@ -1,5 +1,33 @@
-sig ECHO;
+/*
 
-import 'var';
+FINISH WRITING MDCL TO PYTHON COMPILER AND USE IT ON THIS PROGRAM
 
-var.printstuff();
+*/
+
+sig ECHO 1;
+
+import 'os';
+
+parse : [code,] => {
+    output : '';
+    code : (code.replace("\n", '')).split(';');
+    for code {
+        line : #;
+        line : line.replace('write', 'print');
+        line : line.split(',');
+        line : ','.join(line);
+        output +: line + "\n";
+    }
+    ret output;
+}
+
+fname : argv(1);
+if !fname {
+    write('Input file not given.');
+    exit();
+}
+code : readfile(fname);
+compiled : parse(code);
+:writefile(fname + '.py', compiled);
+:os.clirun('py ../src/__init__.py ' + fname);
+:os.clirun('py ' + fname + '.py');
