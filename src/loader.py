@@ -99,7 +99,11 @@ def tokenise(line):
         ) and not (
             t == '/' and a == ':'
         ) and not (
-            t == '$' and p == 'D'
+            t == '_' and p == 'A'
+        ) and not (
+            q == 'A' and a == '_'
+        ) and not (
+            t == '_' and a == '_'
         ) and not (
             t == 'x' and (a in '"\'')
         ) and not (
@@ -234,8 +238,8 @@ def tokenise_file(code, split_at=';', dofilter=True):
 
 
 def post_tokenise(lst):
-    if '>' in lst:
-        i = lst.index('>')
+    if 'do' in lst:
+        i = lst.index('do')
         lst[i] = '{' + ' '.join(lst[i + 1:]) + '}'
         del lst[i + 1:]
     return lst

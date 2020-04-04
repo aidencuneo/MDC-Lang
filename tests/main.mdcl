@@ -1,33 +1,16 @@
-/*
+students : (
+    'aiden blishen cuneo',
+    'someone else?',
+);
 
-FINISH WRITING MDCL TO PYTHON COMPILER AND USE IT ON THIS PROGRAM
-
-*/
-
-sig ECHO 1;
-
-import 'os';
-
-parse : [code,] => {
-    output : '';
-    code : (code.replace("\n", '')).split(';');
-    for code {
-        line : #;
-        line : line.replace('write', 'print');
-        line : line.split(',');
-        line : ','.join(line);
-        output +: line + "\n";
+capitalise_all : [list,] => {
+    n : ();
+    func : [a,]=>{ret a.capitalise()};
+    for list {
+        n +: ' '.join(#.split(' ').map(func));
     }
-    ret output;
+    ret n;
 }
 
-fname : argv(1);
-if !fname {
-    write('Input file not given.');
-    exit();
-}
-code : readfile(fname);
-compiled : parse(code);
-:writefile(fname + '.py', compiled);
-:os.clirun('py ../src/__init__.py ' + fname);
-:os.clirun('py ' + fname + '.py');
+students : capitalise_all(students);
+students;

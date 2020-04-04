@@ -1,0 +1,7 @@
+clirun : [text,] => {
+    :pyexec('os.system("' + text + '")');
+};
+
+cls : [] => {
+    :pyexec('os.system("cls" if os.name == "nt" else "clear")');
+};

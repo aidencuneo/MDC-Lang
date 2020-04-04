@@ -1,0 +1,16 @@
+pyexec('import random');
+
+choice : [list,] => {
+    ret pyeval('random.choice(' + list + ')');
+};
+
+randint : [from, until*] => {
+    if type(from) = 'Integer' {
+        min : from;
+        max : until;
+    }   {
+        min : 0;
+        max : from;
+    };
+    ret pyeval('random.randint(' + min + ', ' + max + ')');
+};
