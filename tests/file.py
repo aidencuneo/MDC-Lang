@@ -3,11 +3,408 @@
 MDCL created by Aiden Blishen Cuneo.
 First Commit was at: 1/1/2020.
 
+
+PATTERN:
+
+definition,
+
+    __init__,
+
+    __magicmethods__,
+
+    appending/adding methods,
+
+    splicing/removing methods,
+
+    getting/retrieving methods,
+
+    boolean returning methods,
+
+'''
+
+
+class CompactList:
+
+    def __init__(self, *values):
+        __slots__ = []
+        self._value = ()
+        values = values[0] if len(values) == 1 else values
+        for a in values:
+            self.append(a)
+    
+    def __repr__(self):
+        return str(list(self._value))
+    
+    def __str__(self):
+        return str(list(self._value))
+    
+    def __eq__(self, value):
+        return self._value == value
+    
+    def __getitem__(self, item):
+        return self._value[item]
+    
+    def __setitem__(self, item, value):
+        self.setitem(item, value)
+    
+    def __delattr__(self, index):
+        self.delete_from(index)
+
+    def __delitem__(self, index):
+        self.delete_from(index)
+    
+    def __contains__(self, item):
+        return item in self._value
+    
+    def setitem(self, item, value):
+        self._value = list(self._value)
+        self._value[item] = value
+        self._value = tuple(self._value)
+
+    def append(self, value):
+        self._value += tuple([value])
+
+    def extend(self, value):
+        self._value += tuple(value)
+
+    def delete_from(self, index):
+        self._value = list(self._value)
+        del self._value[index]
+        self._value = tuple(self._value)
+    
+    def index(self, item):
+        return self._value.index(item)
+
+    def is_empty(self):
+        return not bool(self._value)
+
+    def has_data(self):
+        return bool(self._value)
+
+
+class CompactDict:
+
+    def __init__(self, values=None):
+        __slots__ = []
+        self._value = CompactList()
+        values = {} if values is None else values
+        for a in values:
+            self.setitem(a, values[a])
+
+    def __repr__(self):
+        return str(self.as_dict())
+
+    def __str__(self):
+        return str(self.as_dict())
+
+    def __add__(self, other):
+        for a in other:
+            self[a] = other[a]
+        return self
+
+    def __delattr__(self, key):
+        self.delete_key(key)
+
+    def __getitem__(self, item):
+        return self.getitem(item)
+
+    def __setitem__(self, key, value):
+        return self.setitem(key, value)
+
+    def __delitem__(self, key):
+        self.delete_key(key)
+    
+    def __contains__(self, key):
+        return key in self.as_dict()
+
+    def setitem(self, key, value):
+        if key in self.keys():
+            self._value[self.keys().index(key)][1] = value
+        else:
+            self._value.append(CompactList(key, value))
+
+    def getitem(self, name):
+        if all([a in '0123456789' for a in str(name)]) and name not in self.keys()._value:
+            return self.keys()[name]
+        return self.as_dict()[name]
+
+    def as_dict(self):
+        return {a[0] : a[1] for a in self._value}
+    
+    def keys(self):
+        return CompactList([a[0] for a in self._value])
+    
+    def values(self):
+        return CompactList([a[1] for a in self._value])
+    
+    def delete_key(self, key):
+        if key in self.keys()._value:
+            del self._value[self.keys().index(key)]
+        else:
+            raise KeyError
+
+    def is_empty(self):
+        return not bool(self.as_dict())
+
+    def has_data(self):
+        return bool(self.as_dict())
+
+'''
+
+MDCL created by Aiden Blishen Cuneo.
+First Commit was at: 1/1/2020.
+
+'''
+
+import re
+import sys
+import string
+
+alphabet = string.letters if sys.version_info[0] < 3 else string.ascii_letters
+digits = string.digits
+symbols = string.punctuation
+whitespace = string.whitespace
+
+
+def get_code(fname, fromline=0, specificline=0, specificindex=None, setcode=None):
+    try:
+        if not setcode:
+            with open(fname) as f:
+                code = f.read()
+        else:
+            code = setcode
+        for a in range(fromline - 1):
+            code = code[code.index('\n') + 1:]
+        if specificline > 0:
+            code = code.split('\n')[specificline - 1]
+        if specificindex is not None:
+            code = code.split('\n')[specificindex]
+        return code
+    except Exception as e:
+        return e
+
+
+def process(code):
+    return tokenise_file(code)#.replace('\n', ''))
+
+
+def count_lines(fname):
+    try:
+        with open(fname) as f:
+            text = f.read()
+        return text.count('\n')
+    except Exception as e:
+        return e
+
+
+def isnum(num):
+    return re.match('^(-|\+)*[0-9]+$', num)
+
+
+def isfloat(num):
+    return re.match('^(-|\+)*[0-9]*\.[0-9]+$', num)
+
+
+def isword(word):
+    return all([b in alphabet for b in word])
+
+
+def tokenise(line):
+    sq = False
+    dq = False
+    bt = False
+    bcomment = False
+    rb = 0
+    sb = 0
+    cb = 0
+    l = []
+    o = ''
+    p = ''
+    t = ''
+    for a in line.strip():
+        q = p
+        if a in alphabet:
+            p = 'A'
+        elif a in digits:
+            p = 'D'
+        elif a in symbols:
+            p = 'S'
+        elif a in whitespace:
+            p = 'W'
+        if (q != p and p != 'W' or p == 'S') and not (
+            t in ('-', '+') and p == 'D'
+        ) and not (
+            t == '=' and a == '='
+        ) and not (
+            t == '=' and a == '>'
+        ) and not (
+            t == '>' and a == '='
+        ) and not (
+            t == '<' and a == '='
+        ) and not (
+            t == '+' and a == ':'
+        ) and not (
+            t == '-' and a == ':'
+        ) and not (
+            t == '*' and a == ':'
+        ) and not (
+            t == '/' and a == ':'
+        ) and not (
+            t == '_' and p == 'A'
+        ) and not (
+            q == 'A' and a == '_'
+        ) and not (
+            t == '_' and a == '_'
+        ) and not (
+            t == 'x' and (a in '"\'')
+        ) and not (
+            sq or dq or bt or rb > 0 or sb > 0 or cb > 0 or bcomment
+        ):
+            l.append(o.strip())
+            o = ''
+        if a == "'" and not (
+            dq or bt or rb > 0 or sb > 0 or cb > 0 or bcomment
+        ):
+            sq = not sq
+        elif a == '"' and not (
+            sq or bt or rb > 0 or sb > 0 or cb > 0 or bcomment
+        ):
+            dq = not dq
+        elif a == '`' and not (
+            sq or dq or rb > 0 or sb > 0 or cb > 0
+        ):
+            bt = not bt
+        elif a == '(' and not (
+            sq or dq or bt or sb > 0 or cb > 0
+        ):
+            rb += 1
+        elif a == ')' and not (
+            sq or dq or bt or sb > 0 or cb > 0
+        ):
+            rb -= 1
+        elif a == '[' and not (
+            sq or dq or bt or rb > 0 or cb > 0
+        ):
+            sb += 1
+        elif a == ']' and not (
+            sq or dq or bt or rb > 0 or cb > 0
+        ):
+            sb -= 1
+        elif a == '{' and not (
+            sq or dq or bt or rb > 0 or sb > 0
+        ):
+            cb += 1
+        elif a == '}' and not (
+            sq or dq or bt or rb > 0 or sb > 0
+        ):
+            cb -= 1
+        elif t == '/' and a == '*' and not (
+            sq or dq or bt or rb > 0 or sb > 0 or cb > 0
+        ):
+            l = l[:-1]
+            bcomment = True
+        elif t == '*' and a == '/' and not (
+            sq or dq or bt or rb > 0 or sb > 0 or cb > 0
+        ):
+            a = ''
+            bcomment = False
+        if not bcomment:
+            o += a
+        t = a
+    out = list(filter(None, l + [o]))
+    return post_tokenise(out)
+
+
+def tokenise_file(code, split_at=';', dofilter=True):
+    sq = False
+    dq = False
+    bt = False
+    bcomment = False
+    rb = 0
+    sb = 0
+    cb = 0
+    l = []
+    o = ''
+    p = ''
+    t = ''
+    for a in code:
+        if a == "'" and not (
+            dq or bt or rb > 0 or sb > 0 or cb > 0 or bcomment
+        ):
+            sq = not sq
+        elif a == '"' and not (
+            sq or bt or rb > 0 or sb > 0 or cb > 0 or bcomment
+        ):
+            dq = not dq
+        elif a == '`' and not (
+            sq or dq or rb > 0 or sb > 0 or cb > 0 or bcomment
+        ):
+            bt = not bt
+        elif a == '(' and not (
+            sq or dq or bt or sb > 0 or cb > 0 or bcomment
+        ):
+            rb += 1
+        elif a == ')' and not (
+            sq or dq or bt or sb > 0 or cb > 0 or bcomment
+        ):
+            rb -= 1
+        elif a == '[' and not (
+            sq or dq or bt or rb > 0 or cb > 0 or bcomment
+        ):
+            sb += 1
+        elif a == ']' and not (
+            sq or dq or bt or rb > 0 or cb > 0 or bcomment
+        ):
+            sb -= 1
+        elif a == '{' and not (
+            sq or dq or bt or rb > 0 or sb > 0 or bcomment
+        ):
+            cb += 1
+        elif a == '}' and not (
+            sq or dq or bt or rb > 0 or sb > 0 or bcomment
+        ):
+            cb -= 1
+            o += a
+            a = split_at
+        elif t == '/' and a == '*' and not (
+            sq or dq or bt or rb > 0 or sb > 0 or cb > 0
+        ):
+            bcomment = True
+        elif t == '*' and a == '/' and not (
+            sq or dq or bt or rb > 0 or sb > 0 or cb > 0
+        ):
+            bcomment = False
+        if a == split_at and not (
+            sq or dq or bt or rb > 0 or sb > 0 or cb > 0 or bcomment
+        ):
+            l.append(o.strip(' \t\v\f\r'))
+            o = ''
+        else:
+            o += a
+        t = a
+    out = l + [o.strip(' \t\v\f\r')]
+    if dofilter:
+        out = list(filter(None, out))
+    return out
+
+
+def post_tokenise(lst):
+    if 'do' in lst:
+        i = lst.index('do')
+        lst[i] = '{' + ' '.join(lst[i + 1:]) + '}'
+        del lst[i + 1:]
+    return lst
+
+'''
+
+MDCL created by Aiden Blishen Cuneo.
+First Commit was at: 1/1/2020.
+
 '''
 
 _debug_mode = True
-_is_compiled = False
-__version__ = '1.6.8'
+_is_compiled = True
+__version__ = '1.6.7'
 
 import ast
 import datetime
@@ -22,9 +419,7 @@ import types
 from copy import copy, deepcopy
 from pprint import pformat
 
-import loader
 
-from compact import CompactList, CompactDict
 
 get_input = raw_input if sys.version_info[0] < 3 else input
 
@@ -1377,10 +1772,10 @@ def initialise_local_vars():
             lambda x: exec(str(x[0].value), globals())),
         'tokenise': BuiltinFunction('tokenise',
             [['@']],
-            lambda x: loader.tokenise(x[0].value)),
+            lambda x: tokenise(x[0].value)),
         'tokeniseFile': BuiltinFunction('tokeniseFile',
             [['@']],
-            lambda x: loader.tokenise_file(x[0].value)),
+            lambda x: tokenise_file(x[0].value)),
 
         'exit': BuiltinFunction('exit',
             [],
@@ -1496,7 +1891,7 @@ def import_module(fname):
     global current_code
     global current_line
     global local_vars
-    newcode = loader.get_code(fname)
+    newcode = get_code(fname)
     if isinstance(newcode, Exception):
         return
     oldfile = current_file
@@ -1557,10 +1952,10 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
         filename = ''
         line = 1
     if raw:
-        code = loader.process(code)
+        code = process(code)
     if oneline:
         code = [code]
-    lines = loader.tokenise_file(rawcode, dofilter=False)
+    lines = tokenise_file(rawcode, dofilter=False)
     if has_breadcrumbs:
         breadcrumbs += [[
             current_file,
@@ -1579,7 +1974,7 @@ def run(rawcode, filename=None, tokenised=False, oneline=False, echo=True, raw=F
         if tokenised:
             a = code[i]
         else:
-            a = loader.tokenise(code[i])
+            a = tokenise(code[i])
         if not a:
             i += 1
             continue
@@ -2360,7 +2755,7 @@ def evaluate(exp, error=None, args=None, funcargs=False, has_breadcrumbs=True, f
                 if isinstance(new[a - 1], (Function, BuiltinFunction)):
                     temp = True
             if not temp:
-                values = evaluate(loader.tokenise(new[a][1:-1].strip()), args=args, error=error)
+                values = evaluate(tokenise(new[a][1:-1].strip()), args=args, error=error)
                 if isinstance(values, tuple):
                     new[a] = Array()
                 else:
@@ -2369,14 +2764,14 @@ def evaluate(exp, error=None, args=None, funcargs=False, has_breadcrumbs=True, f
                     a -= 1
                 a += 1
                 continue
-            values = evaluate(loader.tokenise(new[a][1:-1].strip()), error=error, args=args, translate=False)
+            values = evaluate(tokenise(new[a][1:-1].strip()), error=error, args=args, translate=False)
             new[a] = call_function(new[a - 1], values)
             del new[a - 1]
             a -= 1
         elif new[a].startswith('`') or new[a].endswith('`'):
             if not new[a].startswith('`') or not new[a].endswith('`'):
                 call_error('Unmatched ' + pformat('`') + '.', 'syntax', error)
-            values = evaluate(loader.tokenise(new[a][1:-1].strip()), error=error, args=args)
+            values = evaluate(tokenise(new[a][1:-1].strip()), error=error, args=args)
             new[a] = values
             if len(new) > 1 and len(exp) > 1:
                 a -= 1
@@ -2630,7 +3025,7 @@ class BFList:
     @staticmethod
     def _eval(args):
         mdc_assert(None, args[0], String, 'eval', showname=False)
-        return evaluate(loader.tokenise(args[0].value))
+        return evaluate(tokenise(args[0].value))
 
     @staticmethod
     def _assign(args):
@@ -2803,3 +3198,30 @@ initialise_local_vars()
 datatypes = copy(builtin_types)
 global_vars = CompactDict()
 global_args = [String(a) for a in (sys.argv if _is_compiled else sys.argv[1:])]
+
+import functools
+fname = os.path.abspath(sys.argv[0])
+dirname = os.path.dirname(fname)
+src_path = sys.path[0] if _debug_mode else os.path.dirname(sys.path[0])
+initialise_path(src_path, dirname, compiled=True)
+
+def iterate(arg):
+    if isinstance(arg, int):
+        arg = range(arg)
+    return arg
+def call(func, args=None):
+    return call_function(local_vars[func], args)
+
+for a in local_vars:
+    exclude = ['len', 'type', 'locals', 'globals', 'exec', 'eval', 'int', 'float']
+    if type(local_vars[a]) in (Function, BuiltinFunction) and a not in globals().keys() and a not in exclude:
+        exec(a + '=functools.partial(call, ' + pformat(a) + ')')
+
+def cbstrip(str,):
+    if (str [0] == scb) and (str [-1] == ecb):
+        str = str [1:-1]
+    return str . strip ("\n\t ")
+def bstrip(str,):
+    if (str [0] == sb) and (str [-1] == eb):
+        str = pyeval(pretty(str) + '[1:-1]')
+    return str . strip ("\n\t ")
