@@ -1,0 +1,323 @@
+scb : '{';
+ecb : '}';
+
+sb : '(';
+eb : ')';
+
+ssb : '[';
+esb : ']';
+
+error : [text] => {
+    echo(text);
+    '\n';
+    exit();
+}
+
+cbstrip : [str] => {
+    if (str[0] = scb) and (str[-1] = ecb) do str : str[1:-1];
+    ret str.strip("\n\t ");
+}
+
+bstrip : [str] => {
+    if (str[0] = sb) and (str[-1] = eb) do str : str[1:-1];
+    ret str.strip("\n\t ");
+}
+
+sbstrip : [str] => {
+    if (str[0] = ssb) and (str[-1] = esb) do str : str[1:-1];
+    ret str.strip("\n\t ");
+}
+
+compile : [text, scope=0, canEcho=True, inline=False] => {
+    compiled : '';
+    lines : tokeniseFile(text);
+
+    for i : lines {
+        line : ();
+        last : '';
+        for tokenise(i) {
+            if (#.startswith(sb)) and (#.endswith(eb)) {
+                if last = ':' {
+                    line +: __,;
+                    last : __;
+                } else {
+                    n : sb + (compile(bstrip(#), 0, false, false).strip("\n ")) + eb;
+                    line +: n,;
+                    last : n;
+                }
+            } elif (#.startswith(ssb) and (#.endswith(esb))) {
+                if last = ':' {
+                    line +: __,;
+                    last : __;
+                } else {
+                    n : #.replace('#', '__');
+                    line +: n,;
+                    last : n;
+                }
+            } elif # = 'true' {
+                line +: 'True',;
+                last : 'True';
+            } elif # = 'false' {
+                line +: 'False',;
+                last : 'False';
+            } elif # = 'null' {
+                line +: 'None',;
+                last : 'None';
+            } elif # = '=' {
+                line +: '==',;
+                last : '==';
+            } elif # = '#' {
+                line +: '__',;
+                last : '__';
+            } elif # = '!' {
+                line +: 'not',;
+                last : 'not';
+            } else {
+                line +: #,;
+                last : #;
+            }
+        }
+
+        if len(line) < 1 do line +: null,;
+
+        line; '\n';
+
+        if ':' in line {
+            compiled +: scope * ' ';
+            if line[0] = 'for' {
+                compiled +: 'for ' + (line[1]) + ' in ';
+                index : 0;
+                for line {
+                    if # = ':' do break;
+                    index +: 1;
+                }
+                c : '';
+                for index + 1 to (len(line) - 1) do c +: line[#] + ' ';
+                c : compile(c, 0, false, true).strip();
+                compiled +: 'iterate(' + c + "):\n";
+                compiled +: compile(cbstrip(line[-1]), scope + 4, true);
+            } elif '=>' in line {
+                compiled +: scope * ' ';
+                compiled +: 'def ' + (line[0]) + '(' +
+                    (line[2].strip('[]')) + "):\n";
+                compiled +: compile(cbstrip(line[-1]), scope + 4, true).rstrip() + "\n\n";
+            } else {
+                start : '';
+                index : 0;
+                for line {
+                    if # = ':' do break;
+                    start +: #;
+                    index +: 1;
+                }
+                compiled +: start + ' = ';
+                c : '';
+                for index + 1 to (len(line)) do c +: line[#] + ' ';
+                compiled +: compile(c, 0, false, true).strip();
+                compiled +: '\n';
+            }
+        } elif '+:' in line {
+            if (!inline) do
+                compiled +: scope * ' ';
+            start : '';
+            index : 0;
+            for line {
+                if # = '+:' do break;
+                start +: #;
+                index +: 1;
+            }
+            compiled +: start + ' += ';
+            c : '';
+            for index + 1 to (len(line)) do c +: line[#] + ' ';
+            compiled +: compile(c, 0, false, true).strip();
+            compiled +: '\n';
+        } elif '-:' in line {
+            if (!inline) do
+                compiled +: scope * ' ';
+            start : '';
+            index : 0;
+            for line {
+                if # = '-:' do break;
+                start +: #;
+                index +: 1;
+            }
+            compiled +: start + ' -= ';
+            c : '';
+            for index + 1 to (len(line)) do c +: line[#] + ' ';
+            compiled +: compile(c, 0, false, true).strip();
+            compiled +: '\n';
+        } elif '*:' in line {
+            if (!inline) do
+                compiled +: scope * ' ';
+            start : '';
+            index : 0;
+            for line {
+                if # = '*:' do break;
+                start +: #;
+                index +: 1;
+            }
+            compiled +: start + ' *= ';
+            c : '';
+            for index + 1 to (len(line)) do c +: line[#] + ' ';
+            compiled +: compile(c, 0, false, true).strip();
+            compiled +: '\n';
+        } elif '/:' in line {
+            if (!inline) do
+                compiled +: scope * ' ';
+            start : '';
+            index : 0;
+            for line {
+                if # = '/:' do break;
+                start +: #;
+                index +: 1;
+            }
+            compiled +: start + ' /= ';
+            c : '';
+            for index + 1 to (len(line)) do c +: line[#] + ' ';
+            compiled +: compile(c, 0, false, true).strip();
+            compiled +: '\n';
+        } elif '?' in line {
+            compiled +: scope * ' ';
+            cond : '';
+            index : 0;
+            for line {
+                if # = '?' do break;
+                cond +: # + ' ';
+                index +: 1;
+            }
+            if '\\' in line {
+                first : '';
+                bindex : 0;
+                for range(index + 1, len(line)) {
+                    bindex : #;
+                    if line[#] = '\\' do break;
+                    first +: line[#] + ' ';
+                }
+                second : '';
+                for range(bindex + 1, len(line)) do
+                    second +: line[#] + ' ';
+            } else {
+                first : '';
+                bindex : 0;
+                for range(index + 1, len(line)) do
+                    first +: line[#] + ' ';
+                second : 'None';
+            }
+            compiled +: first.strip() + ' if ' + cond.strip() + ' else ' + second.strip() + '\n';
+            done : true;
+        } elif (line[0]) in ('if', 'elif', 'while') {
+            compiled +: scope * ' ';
+            compiled +: line[0] + ' ';
+            index : 0;
+            for line {
+                if (#.startswith(scb)) and (#.endswith(ecb)) do
+                    break;
+                index +: 1;
+            }
+            for 1 to index do compiled +: line[#] + ' ';
+            compiled : compiled.rstrip();
+            compiled +: ":\n";
+            compiled +: compile(cbstrip(line[index]), scope + 4).rstrip() + '\n';
+        } elif line[0] = 'else' {
+            compiled +: scope * ' ';
+            compiled +: "else:\n";
+            compiled +: compile(cbstrip(line[1]), scope + 4).rstrip() + '\n';
+        } elif line[0] = 'for' {
+            compiled +: scope * ' ';
+            compiled +: 'for __ in ';
+            c : '';
+            for 1 to (len(line) - 1) do c +: line[#] + ' ';
+            c : compile(c, 0, false, true).strip();
+            compiled +: 'iterate(' + c + "):\n";
+            compiled +: compile(cbstrip(line[-1]), scope + 4, true).rstrip() + '\n';
+        } elif 'to' in line {
+            compiled +: scope * ' ';
+            index : line.index('to');
+            first : ' '.join(line[:index]);
+            second : ' '.join(line[index + 1:]);
+            compiled +: 'range(' + first + ', ' + second + ')\n';
+        } elif len(line) > 1 {
+            if (line[1].startswith(sb)) and (line[1].endswith(eb)) {
+                echoable : true;
+                first : line[0];
+                write('first: ' + first);
+                if first in fKeys {
+                    index : 0;
+                    for fKeys {
+                        if # = first do break;
+                        index +: 1;
+                    }
+                    first : fVals[index];
+                }
+                write('secnd: ' + first);
+                if first in ('print', 'echo') do echoable : false;
+                compiled +: scope * ' ';
+                c : '';
+                for 1 to (len(line)) do c +: line[#] + ' ';
+                c : first + (compile(c, 0, false, true));
+                compiled +: (canEcho and !(# in keywords) and echoable) ?
+                    "print(" + c + ", end='')\n" \ c;
+                compiled +: '\n';
+            } elif line[0] = 'ret' {
+                compiled +: scope * ' ' + 'return ';
+                for 1 to (len(line)) {
+                    if type(line[#]).__name__ = 'str' do
+                        compiled +: line[#] + ' ';
+                }
+                compiled : compiled.rstrip();
+            } elif inline {
+                c : ' '.join(line);
+                compiled +: canEcho and # ! in keywords ?
+                    "print(" + c + ", end='')\n" \ c;
+                compiled : compiled.rstrip();
+            } else {
+                c : compile(' '.join(line), 0, false, true);
+                compiled +: canEcho and # ! in keywords ?
+                    "print(" + c + ", end='')\n" \ c;
+            }
+        } elif len(line) = 1 {
+            for line {
+                if type(#).__name__ = 'str' {
+                    compiled +: scope * ' ';
+                    compiled +: canEcho and # ! in keywords ?
+                        "print(" + # + ", end='')\n" \ #;
+                }
+            }
+        }
+
+    }
+    ret compiled;
+}
+
+fKeys : ('write', 'exit', 'string', 'date');
+fVals : ('print', 'sys.exit', 'str', 'Date');
+keywords : ('break', 'ret');
+
+this : argv(1);
+code : readfile(this);
+
+compiled : readfile('src/compact.py') + '\n';
+compiled +: readfile('src/loader.py') + '\n';
+compiled +:
+    readfile('src/var.py')
+    .replace('loader.', '')
+    .replace("import loader\n", '')
+    .replace("from compact import CompactList, CompactDict\n", '')
+    .replace("_is_compiled = False\n", "_is_compiled = True\n")
+    + '\n';
+compiled +: "import functools\n" +
+    "fname = os.path.abspath(sys.argv[0])\n" +
+    "dirname = os.path.dirname(fname)\n" +
+    "src_path = sys.path[0] if _debug_mode else os.path.dirname(sys.path[0])\n" +
+    "initialise_path(src_path, dirname, compiled=True)\n\n";
+compiled +: "\ndef iterate(arg):\n" +
+    "    if isinstance(arg, int):\n" +
+    "        arg = range(arg)\n" +
+    "    return arg\n\n\n";
+compiled +: "def call(func, *args):\n" +
+    "    return call_function(local_vars[func], args)\n\n\n";
+compiled +: "for a in local_vars:\n" +
+    "    exclude = ['len', 'type', 'locals', 'globals', 'exec', 'eval', 'int', 'float']\n" + 
+    "    if type(local_vars[a]) in (Function, BuiltinFunction) and a not in globals().keys() and a not in exclude:\n" +
+    "        exec(a + '=functools.partial(call, ' + pformat(a) + ')')\n\n";
+compiled +: compile(code, 0, true) + '\n';
+writefile('.'.join(this.split('.')[:-1]) + '.py', compiled.strip() + '\n');

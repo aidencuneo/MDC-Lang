@@ -404,7 +404,7 @@ First Commit was at: 1/1/2020.
 
 _debug_mode = True
 _is_compiled = True
-__version__ = '1.6.7'
+__version__ = '1.6.8'
 
 import ast
 import datetime
@@ -573,7 +573,7 @@ class Function(BaseDatatype):
             args = args.value
         args = self.check_args(args)
         if isinstance(self.code, (types.FunctionType, types.BuiltinFunctionType, type)):
-            r = translate_datatypes(self.code(*args))
+            r = self.code(*args)
             global_vars['_'] = r
             return r
         if ex_args:
@@ -589,7 +589,7 @@ class BuiltinFunction(Function):
         if isinstance(args, Array):
             args = args.value
         args = self.check_args(args)
-        r = translate_datatypes(self.code(args))
+        r = self.code(args)
         global_vars['_'] = r
         return r
 
@@ -1762,20 +1762,20 @@ def initialise_local_vars():
             BFList._assign),
         'pretty': BuiltinFunction('pretty',
             [['@']],
-            lambda x: pformat(x[0].value)),
+            lambda x: pformat(x[0])),
 
         'pyeval': BuiltinFunction('pyeval',
             [['@']],
-            lambda x: eval(str(x[0].value), globals())),
+            lambda x: eval(str(x[0]), globals())),
         'pyexec': BuiltinFunction('pyexec',
             [['@']],
-            lambda x: exec(str(x[0].value), globals())),
+            lambda x: exec(str(x[0]), globals())),
         'tokenise': BuiltinFunction('tokenise',
             [['@']],
-            lambda x: tokenise(x[0].value)),
+            lambda x: tokenise(x[0])),
         'tokeniseFile': BuiltinFunction('tokeniseFile',
             [['@']],
-            lambda x: tokenise_file(x[0].value)),
+            lambda x: tokenise_file(x[0])),
 
         'exit': BuiltinFunction('exit',
             [],
@@ -2911,13 +2911,16 @@ class BFList:
 
     @staticmethod
     def readfile(args):
-        if not isinstance(args[0], String):
+        args = list(args)
+        if isinstance(args[0], String):
+            args[0] = args[0].value
+        if not isinstance(args[0], str):
             call_error('readfile first argument must be of type String, ' + type(args[0]).__name__ + ' is invalid.', 'argerr')
         try:
-            with open(args[0].value, 'rb') as f:
+            with open(args[0], 'rb') as f:
                 data = f.read()
             data = data.decode('utf-8').replace('\r\n', '\n')
-            return String(data)
+            return data
         except UnicodeDecodeError:
             call_error('readfile failed to decode file encoding from: "' + str(args[0]) + '".', 'ioerr')
         except FileNotFoundError:
@@ -2927,14 +2930,19 @@ class BFList:
 
     @staticmethod
     def writefile(args):
-        if not isinstance(args[0], String):
+        args = list(args)
+        if isinstance(args[0], String):
+            args[0] = args[0].value
+        if not isinstance(args[0], str):
             call_error('writefile first argument must be of type String, ' + type(args[0]).__name__ + ' is invalid.', 'argerr')
-        if not isinstance(args[1], String):
+        if isinstance(args[1], String):
+            args[1] = args[1].value
+        if not isinstance(args[1], str):
             call_error('writefile second argument must be of type String, ' + type(args[1]).__name__ + ' is invalid.', 'argerr')
         try:
-            with open(args[0].value, 'w') as f:
-                f.write(args[1].value)
-            return Integer(len(args[1].value))
+            with open(args[0], 'w') as f:
+                f.write(args[1])
+            return Integer(len(args[1]))
         except Exception:
             call_error('writefile failed to write to file at path: "' + str(args[0]) + '"', 'ioerr')
 
@@ -3197,7 +3205,7 @@ initialise_local_vars()
 
 datatypes = copy(builtin_types)
 global_vars = CompactDict()
-global_args = [String(a) for a in (sys.argv if _is_compiled else sys.argv[1:])]
+global_args = sys.argv if _is_compiled else sys.argv[1:]
 
 import functools
 fname = os.path.abspath(sys.argv[0])
@@ -3205,23 +3213,24 @@ dirname = os.path.dirname(fname)
 src_path = sys.path[0] if _debug_mode else os.path.dirname(sys.path[0])
 initialise_path(src_path, dirname, compiled=True)
 
+
 def iterate(arg):
     if isinstance(arg, int):
         arg = range(arg)
     return arg
-def call(func, args=None):
+
+
+def call(func, *args):
     return call_function(local_vars[func], args)
+
 
 for a in local_vars:
     exclude = ['len', 'type', 'locals', 'globals', 'exec', 'eval', 'int', 'float']
     if type(local_vars[a]) in (Function, BuiltinFunction) and a not in globals().keys() and a not in exclude:
         exec(a + '=functools.partial(call, ' + pformat(a) + ')')
 
-def cbstrip(str,):
-    if (str [0] == scb) and (str [-1] == ecb):
-        str = str [1:-1]
-    return str . strip ("\n\t ")
-def bstrip(str,):
-    if (str [0] == sb) and (str [-1] == eb):
-        str = pyeval(pretty(str) + '[1:-1]')
-    return str . strip ("\n\t ")
+for __ in iterate(1000):
+    print('The number is ', end='')
+    print(__)
+    print('The number divided by 2 is ', end='')
+    print(__ / 2)

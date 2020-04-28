@@ -404,7 +404,7 @@ First Commit was at: 1/1/2020.
 
 _debug_mode = True
 _is_compiled = True
-__version__ = '1.6.7'
+__version__ = '1.6.8'
 
 import ast
 import datetime
@@ -573,7 +573,7 @@ class Function(BaseDatatype):
             args = args.value
         args = self.check_args(args)
         if isinstance(self.code, (types.FunctionType, types.BuiltinFunctionType, type)):
-            r = translate_datatypes(self.code(*args))
+            r = self.code(*args)
             global_vars['_'] = r
             return r
         if ex_args:
@@ -589,7 +589,7 @@ class BuiltinFunction(Function):
         if isinstance(args, Array):
             args = args.value
         args = self.check_args(args)
-        r = translate_datatypes(self.code(args))
+        r = self.code(args)
         global_vars['_'] = r
         return r
 
@@ -1762,20 +1762,20 @@ def initialise_local_vars():
             BFList._assign),
         'pretty': BuiltinFunction('pretty',
             [['@']],
-            lambda x: pformat(x[0].value)),
+            lambda x: pformat(x[0])),
 
         'pyeval': BuiltinFunction('pyeval',
             [['@']],
-            lambda x: eval(str(x[0].value), globals())),
+            lambda x: eval(str(x[0]), globals())),
         'pyexec': BuiltinFunction('pyexec',
             [['@']],
-            lambda x: exec(str(x[0].value), globals())),
+            lambda x: exec(str(x[0]), globals())),
         'tokenise': BuiltinFunction('tokenise',
             [['@']],
-            lambda x: tokenise(x[0].value)),
+            lambda x: tokenise(x[0])),
         'tokeniseFile': BuiltinFunction('tokeniseFile',
             [['@']],
-            lambda x: tokenise_file(x[0].value)),
+            lambda x: tokenise_file(x[0])),
 
         'exit': BuiltinFunction('exit',
             [],
@@ -2911,13 +2911,16 @@ class BFList:
 
     @staticmethod
     def readfile(args):
-        if not isinstance(args[0], String):
+        args = list(args)
+        if isinstance(args[0], String):
+            args[0] = args[0].value
+        if not isinstance(args[0], str):
             call_error('readfile first argument must be of type String, ' + type(args[0]).__name__ + ' is invalid.', 'argerr')
         try:
-            with open(args[0].value, 'rb') as f:
+            with open(args[0], 'rb') as f:
                 data = f.read()
             data = data.decode('utf-8').replace('\r\n', '\n')
-            return String(data)
+            return data
         except UnicodeDecodeError:
             call_error('readfile failed to decode file encoding from: "' + str(args[0]) + '".', 'ioerr')
         except FileNotFoundError:
@@ -2927,14 +2930,19 @@ class BFList:
 
     @staticmethod
     def writefile(args):
-        if not isinstance(args[0], String):
+        args = list(args)
+        if isinstance(args[0], String):
+            args[0] = args[0].value
+        if not isinstance(args[0], str):
             call_error('writefile first argument must be of type String, ' + type(args[0]).__name__ + ' is invalid.', 'argerr')
-        if not isinstance(args[1], String):
+        if isinstance(args[1], String):
+            args[1] = args[1].value
+        if not isinstance(args[1], str):
             call_error('writefile second argument must be of type String, ' + type(args[1]).__name__ + ' is invalid.', 'argerr')
         try:
-            with open(args[0].value, 'w') as f:
-                f.write(args[1].value)
-            return Integer(len(args[1].value))
+            with open(args[0], 'w') as f:
+                f.write(args[1])
+            return Integer(len(args[1]))
         except Exception:
             call_error('writefile failed to write to file at path: "' + str(args[0]) + '"', 'ioerr')
 
@@ -3197,7 +3205,7 @@ initialise_local_vars()
 
 datatypes = copy(builtin_types)
 global_vars = CompactDict()
-global_args = [String(a) for a in (sys.argv if _is_compiled else sys.argv[1:])]
+global_args = sys.argv if _is_compiled else sys.argv[1:]
 
 import functools
 fname = os.path.abspath(sys.argv[0])
@@ -3205,12 +3213,16 @@ dirname = os.path.dirname(fname)
 src_path = sys.path[0] if _debug_mode else os.path.dirname(sys.path[0])
 initialise_path(src_path, dirname, compiled=True)
 
+
 def iterate(arg):
     if isinstance(arg, int):
         arg = range(arg)
     return arg
-def call(func, args=None):
+
+
+def call(func, *args):
     return call_function(local_vars[func], args)
+
 
 for a in local_vars:
     exclude = ['len', 'type', 'locals', 'globals', 'exec', 'eval', 'int', 'float']
@@ -3221,14 +3233,286 @@ scb = '{'
 ecb = '}'
 sb = '('
 eb = ')'
+ssb = '['
+esb = ']'
+def error(text):
+    echo(text)
+    print('\n', end='')
+    print(sys.exit(), end='')
 
-def cbstrip(str,):
+def cbstrip(str):
     if (str [0] == scb) and (str [-1] == ecb):
         str = str [1:-1]
     return str . strip ("\n\t ")
-def bstrip(str,):
+
+def bstrip(str):
     if (str [0] == sb) and (str [-1] == eb):
-        str = pyeval(pretty(str) + '[1:-1]')
+        str = str [1:-1]
     return str . strip ("\n\t ")
 
-print(bstrip('({code you know}}())'))
+def sbstrip(str):
+    if (str [0] == ssb) and (str [-1] == esb):
+        str = str [1:-1]
+    return str . strip ("\n\t ")
+
+def compile(text, scope=0, canEcho=True, inline=False):
+    compiled = ''
+    lines = tokeniseFile(text)
+    for i in iterate(lines):
+        line = ()
+        last = ''
+        for __ in iterate(tokenise(i)):
+            if (__ . startswith (sb)) and (__ . endswith (eb)):
+                if last == ':':
+                    line += __ ,
+                    last = __
+                else:
+                    n = sb + (compile(bstrip(__) , 0 , False , False) . strip ("\n ")) + eb
+                    line += n ,
+                    last = n
+            elif (__ . startswith (ssb) and (__ . endswith (esb))):
+                if last == ':':
+                    line += __ ,
+                    last = __
+                else:
+                    n = __ . replace ('#' , '__')
+                    line += n ,
+                    last = n
+            elif __ == 'true':
+                line += 'True' ,
+                last = 'True'
+            elif __ == 'false':
+                line += 'False' ,
+                last = 'False'
+            elif __ == 'null':
+                line += 'None' ,
+                last = 'None'
+            elif __ == '=':
+                line += '==' ,
+                last = '=='
+            elif __ == '#':
+                line += '__' ,
+                last = '__'
+            elif __ == '!':
+                line += 'not' ,
+                last = 'not'
+            else:
+                line += __ ,
+                last = __
+        if len (line) < 1:
+            line += None ,
+        print(line, end='')
+        print('\n', end='')
+        if ':' in line:
+            compiled += scope * ' '
+            if line [0] == 'for':
+                compiled += 'for ' + (line [1]) + ' in '
+                index = 0
+                for __ in iterate(line):
+                    if __ == ':':
+                        break
+                    index += 1
+                c = ''
+                for __ in iterate(range(index + 1, (len(line) - 1))):
+                    c += line [__] + ' '
+                c = compile(c , 0 , False , True) . strip ()
+                compiled += 'iterate(' + c + "):\n"
+                compiled += compile(cbstrip(line [-1]) , scope + 4 , True)
+            elif '=>' in line:
+                compiled += scope * ' '
+                compiled += 'def ' + (line [0]) + '(' + (line [2] . strip ('[]')) + "):\n"
+                compiled += compile(cbstrip(line [-1]) , scope + 4 , True) . rstrip () + "\n\n"
+            else:
+                start = ''
+                index = 0
+                for __ in iterate(line):
+                    if __ == ':':
+                        break
+                    start += __
+                    index += 1
+                compiled += start + ' = '
+                c = ''
+                for __ in iterate(range(index + 1, (len(line)))):
+                    c += line [__] + ' '
+                compiled += compile(c , 0 , False , True) . strip ()
+                compiled += '\n'
+        elif '+:' in line:
+            if (not inline):
+                compiled += scope * ' '
+            start = ''
+            index = 0
+            for __ in iterate(line):
+                if __ == '+:':
+                    break
+                start += __
+                index += 1
+            compiled += start + ' += '
+            c = ''
+            for __ in iterate(range(index + 1, (len(line)))):
+                c += line [__] + ' '
+            compiled += compile(c , 0 , False , True) . strip ()
+            compiled += '\n'
+        elif '-:' in line:
+            if (not inline):
+                compiled += scope * ' '
+            start = ''
+            index = 0
+            for __ in iterate(line):
+                if __ == '-:':
+                    break
+                start += __
+                index += 1
+            compiled += start + ' -= '
+            c = ''
+            for __ in iterate(range(index + 1, (len(line)))):
+                c += line [__] + ' '
+            compiled += compile(c , 0 , False , True) . strip ()
+            compiled += '\n'
+        elif '*:' in line:
+            if (not inline):
+                compiled += scope * ' '
+            start = ''
+            index = 0
+            for __ in iterate(line):
+                if __ == '*:':
+                    break
+                start += __
+                index += 1
+            compiled += start + ' *= '
+            c = ''
+            for __ in iterate(range(index + 1, (len(line)))):
+                c += line [__] + ' '
+            compiled += compile(c , 0 , False , True) . strip ()
+            compiled += '\n'
+        elif '/:' in line:
+            if (not inline):
+                compiled += scope * ' '
+            start = ''
+            index = 0
+            for __ in iterate(line):
+                if __ == '/:':
+                    break
+                start += __
+                index += 1
+            compiled += start + ' /= '
+            c = ''
+            for __ in iterate(range(index + 1, (len(line)))):
+                c += line [__] + ' '
+            compiled += compile(c , 0 , False , True) . strip ()
+            compiled += '\n'
+        elif '?' in line:
+            compiled += scope * ' '
+            cond = ''
+            index = 0
+            for __ in iterate(line):
+                if __ == '?':
+                    break
+                cond += __ + ' '
+                index += 1
+            if '\\' in line:
+                first = ''
+                bindex = 0
+                for __ in iterate(range(index + 1 , len (line))):
+                    bindex = __
+                    if line [__] == '\\':
+                        break
+                    first += line [__] + ' '
+                second = ''
+                for __ in iterate(range(bindex + 1 , len (line))):
+                    second += line [__] + ' '
+            else:
+                first = ''
+                bindex = 0
+                for __ in iterate(range(index + 1 , len (line))):
+                    first += line [__] + ' '
+                second = 'None'
+            compiled += first . strip () + ' if ' + cond . strip () + ' else ' + second . strip () + '\n'
+            done = True
+        elif (line [0]) in ('if' , 'elif' , 'while'):
+            compiled += scope * ' '
+            compiled += line [0] + ' '
+            index = 0
+            for __ in iterate(line):
+                if (__ . startswith (scb)) and (__ . endswith (ecb)):
+                    break
+                index += 1
+            for __ in iterate(range(1, index)):
+                compiled += line [__] + ' '
+            compiled = compiled . rstrip ()
+            compiled += ":\n"
+            compiled += compile(cbstrip(line [index]) , scope + 4) . rstrip () + '\n'
+        elif line [0] == 'else':
+            compiled += scope * ' '
+            compiled += "else:\n"
+            compiled += compile(cbstrip(line [1]) , scope + 4) . rstrip () + '\n'
+        elif line [0] == 'for':
+            compiled += scope * ' '
+            compiled += 'for __ in '
+            c = ''
+            for __ in iterate(range(1, (len(line) - 1))):
+                c += line [__] + ' '
+            c = compile(c , 0 , False , True) . strip ()
+            compiled += 'iterate(' + c + "):\n"
+            compiled += compile(cbstrip(line [-1]) , scope + 4 , True) . rstrip () + '\n'
+        elif 'to' in line:
+            compiled += scope * ' '
+            index = line . index ('to')
+            first = ' ' . join (line [:index])
+            second = ' ' . join (line [index + 1:])
+            compiled += 'range(' + first + ', ' + second + ')\n'
+        elif len (line) > 1:
+            if (line [1] . startswith (sb)) and (line [1] . endswith (eb)):
+                echoable = True
+                first = line [0]
+                print('first: ' + first)
+                if first in fKeys:
+                    index = 0
+                    for __ in iterate(fKeys):
+                        if __ == first:
+                            break
+                        index += 1
+                    first = fVals [index]
+                print('secnd: ' + first)
+                if first in ('print' , 'echo'):
+                    echoable = False
+                compiled += scope * ' '
+                c = ''
+                for __ in iterate(range(1, (len(line)))):
+                    c += line [__] + ' '
+                c = first + (compile(c , 0 , False , True))
+                compiled += "print(" + c + ", end='')\n" if (canEcho and not (__ in keywords) and echoable) else c
+                compiled += '\n'
+            elif line [0] == 'ret':
+                compiled += scope * ' ' + 'return '
+                for __ in iterate(range(1, (len(line)))):
+                    if type (line [__]) . __name__ == 'str':
+                        compiled += line [__] + ' '
+                compiled = compiled . rstrip ()
+            elif inline:
+                c = ' ' . join (line)
+                compiled += "print(" + c + ", end='')\n" if canEcho and __ not in keywords else c
+                compiled = compiled . rstrip ()
+            else:
+                c = compile(' ' . join (line) , 0 , False , True)
+                compiled += "print(" + c + ", end='')\n" if canEcho and __ not in keywords else c
+        elif len (line) == 1:
+            for __ in iterate(line):
+                if type (__) . __name__ == 'str':
+                    compiled += scope * ' '
+                    compiled += "print(" + __ + ", end='')\n" if canEcho and __ not in keywords else __
+    return compiled
+
+fKeys = ('write' , 'exit' , 'string' , 'date')
+fVals = ('print' , 'sys.exit' , 'str' , 'Date')
+keywords = ('break' , 'ret')
+this = argv(1)
+code = readfile(this)
+compiled = readfile('src/compact.py') + '\n'
+compiled += readfile('src/loader.py') + '\n'
+compiled += readfile('src/var.py') . replace ('loader.' , '') . replace ("import loader\n" , '') . replace ("from compact import CompactList, CompactDict\n" , '') . replace ("_is_compiled = False\n" , "_is_compiled = True\n") + '\n'
+compiled += "import functools\n" + "fname = os.path.abspath(sys.argv[0])\n" + "dirname = os.path.dirname(fname)\n" + "src_path = sys.path[0] if _debug_mode else os.path.dirname(sys.path[0])\n" + "initialise_path(src_path, dirname, compiled=True)\n\n"
+compiled += "\ndef iterate(arg):\n" + "    if isinstance(arg, int):\n" + "        arg = range(arg)\n" + "    return arg\n\n\n"
+compiled += "def call(func, *args):\n" + "    return call_function(local_vars[func], args)\n\n\n"
+compiled += "for a in local_vars:\n" + "    exclude = ['len', 'type', 'locals', 'globals', 'exec', 'eval', 'int', 'float']\n" + "    if type(local_vars[a]) in (Function, BuiltinFunction) and a not in globals().keys() and a not in exclude:\n" + "        exec(a + '=functools.partial(call, ' + pformat(a) + ')')\n\n"
+compiled += compile(code , 0 , True) + '\n'
+print(writefile('.' . join (this . split ('.') [:-1]) + '.py' , compiled . strip () + '\n'), end='')
